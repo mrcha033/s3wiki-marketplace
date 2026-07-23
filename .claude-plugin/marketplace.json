@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "s3wiki-marketplace",
+  "description": "Private Agent Skills for S3 Research Memory workflows.",
+  "owner": {
+    "name": "mrcha033"
+  },
+  "plugins": [
+    {
+      "name": "build-lab-meeting-slides",
+      "displayName": "Build Lab Meeting Slides",
+      "source": "./plugins/build-lab-meeting-slides",
+      "description": "Build editable lab-meeting PowerPoint decks while preserving a supplied PPTX template and enforcing visual-quality regression gates.",
+      "version": "0.1.0",
+      "author": {
+        "name": "mrcha033"
+      },
+      "homepage": "https://github.com/mrcha033/s3wiki-marketplace",
+      "repository": "https://github.com/mrcha033/s3wiki-marketplace",
+      "category": "productivity",
+      "tags": [
+        "presentations",
+        "powerpoint",
+        "lab-meeting",
+        "template-native",
+        "research"
+      ]
+    }
+  ]
+}

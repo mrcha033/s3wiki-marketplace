@@ -1,0 +1,20 @@
+{
+  "name": "s3wiki-marketplace",
+  "interface": {
+    "displayName": "S3 Research Memory Private Skills"
+  },
+  "plugins": [
+    {
+      "name": "build-lab-meeting-slides",
+      "source": {
+        "source": "local",
+        "path": "./plugins/build-lab-meeting-slides"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
