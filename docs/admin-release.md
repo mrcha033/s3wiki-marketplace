@@ -1,7 +1,7 @@
 # 관리자 릴리스 체크리스트
 
-연구실 사용자는 `s3-lab-workspace` 하나만 설치합니다. 두 개의 이전 플러그인이나 개인
-Codex 앱을 따로 공유하지 않습니다.
+연구실 사용자는 `s3-lab-workspace` 하나만 설치합니다. 두 개의 이전 플러그인이나
+별도 MCP 설정을 따로 배포하지 않습니다.
 
 ## 사용자에게 열어 줄 것
 
@@ -15,13 +15,12 @@ Codex 앱을 따로 공유하지 않습니다.
 
 ### Claude Code
 
-1. GitHub의 `mrcha033/s3wiki-marketplace`에 사용자를 **Read** 권한으로 초대합니다.
-2. 초대 수락을 확인합니다.
-3. 저장소를 받은 폴더에서 `./scripts/install.sh --claude`를 실행하게 합니다.
+1. 저장소 공개 여부와 사용자의 Git 접근을 확인합니다.
+2. 저장소를 받은 폴더에서 `./scripts/install.sh --claude`를 실행하게 합니다.
+3. `/mcp`에서 S3 Research Memory의 GitHub 로그인을 완료하게 합니다.
 
-저장소가 비공개인 동안 GitHub 초대 없이 Claude Code 원클릭 설치가 된다고 안내하면
-안 됩니다. 사용자 이름을 모르는 상태에서 저장소를 공개하거나 넓은 조직에 권한을
-주지 않습니다.
+저장소를 공개하면 별도 GitHub 초대는 필요하지 않습니다. 저장소 배포 권한과 중앙
+MCP의 GitHub OAuth 인증은 서로 다른 경계입니다.
 
 ## 릴리스 게이트
 
@@ -42,16 +41,16 @@ GitHub Actions도 고정된 지원 버전의 두 CLI로 이 검사를 실행합�
 1. 마켓플레이스 추가
 2. `s3-lab-workspace` 한 번 설치
 3. 랩미팅 슬라이드 스킬 노출
-4. 중앙 MCP 연결과 도구 열 개 노출
-5. `search_lessons(limit=1)` 읽기 호출
+4. 등록 앱 ID와 중앙 MCP URL 포함
+5. 인증 전 연결이 OAuth 로그인을 요구함
 
-운영 서버가 GitHub OAuth 모드라면 이 단계에서 로그인 한 번을 완료합니다. 현재
-`open` 시험 운영은 별도 로그인이 없으므로, 운영 전환 완료로 간주하지 않습니다.
-로컬 소스를 사용한 자동 검사는 설치 동작을 검증하지만, 비공개 GitHub 저장소의 실제
-사용자 초대는 대신하지 않습니다.
+자동 검사는 사용자 동의 화면을 대신 통과하지 않습니다. 실제 릴리스 확인에서는
+Codex 설치 인증, `codex mcp login s3-research-memory` 또는 Claude Code `/mcp`에서
+GitHub 로그인을 한 번 완료하고 `search_lessons(limit=1)`을 호출합니다.
 
 ## 릴리스 후
 
 - 통합 플러그인을 먼저 설치하고 이전 두 플러그인을 제거합니다.
+- 사용자 설정에 남은 수동 `s3-research-memory` Bearer MCP 항목을 제거합니다.
 - Codex와 Claude Code를 새로 열어 중복 스킬이나 중복 MCP 서버가 없는지 확인합니다.
 - 라이브 MCP, 쓰기 정책, 슬라이드 시각 품질은 패키징 검사와 별도로 확인합니다.

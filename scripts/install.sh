@@ -96,7 +96,14 @@ if [[ "$want_claude" == true ]]; then
   install_claude
 fi
 
+printf '%s\n' '새 작업 또는 세션을 열어 사용하세요.'
+if [[ "$want_codex" == true ]]; then
+  printf '%s\n' \
+    'Codex 앱: 설치 화면의 Authenticate로 GitHub 로그인을 완료하세요.' \
+    'Codex CLI: codex mcp login s3-research-memory'
+fi
+if [[ "$want_claude" == true ]]; then
+  printf '%s\n' 'Claude Code: /mcp에서 S3 Research Memory 로그인을 완료하세요.'
+fi
 printf '%s\n' \
-  '새 작업 또는 세션을 열어 사용하세요.' \
-  '연결이 인증을 요청하면 Authenticate 또는 /mcp에서 GitHub 로그인을 완료하세요.' \
   '권한 오류가 나면 명령을 반복하지 말고 연구실 관리자에게 접근 권한을 요청하세요.'

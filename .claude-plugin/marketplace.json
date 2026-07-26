@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "s3wiki-marketplace",
-  "description": "One private install for S3 Research Memory and lab-meeting slides.",
+  "description": "One install for S3 Research Memory and lab-meeting slides.",
   "owner": {
     "name": "mrcha033"
   },
@@ -11,7 +11,7 @@
       "displayName": "S3 Lab Workspace",
       "source": "./plugins/s3-lab-workspace",
       "description": "Search the shared S3 research memory and build editable lab-meeting slides from one install.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "S3 Lab"
       },

@@ -44,7 +44,7 @@ codex_mcp="$(codex mcp list --json)"
 jq -e '
   [.installed[] | select(
     .pluginId == "s3-lab-workspace@s3wiki-marketplace"
-    and .version == "0.2.0"
+    and .version == "0.3.0"
     and .enabled == true
   )] | length == 1
 ' <<<"$codex_plugins" >/dev/null
@@ -52,7 +52,7 @@ jq -e '
 jq -e '
   [.[] | select(
     .id == "s3-lab-workspace@s3wiki-marketplace"
-    and .version == "0.2.0"
+    and .version == "0.3.0"
     and .enabled == true
     and .mcpServers."s3-research-memory".url
       == "https://s3wiki.yonsei.ac.kr/mcp"
@@ -64,10 +64,12 @@ jq -e '
     .name == "s3-research-memory"
     and .enabled == true
     and .transport.url == "https://s3wiki.yonsei.ac.kr/mcp"
+    and .transport.bearer_token_env_var == null
+    and .auth_status == "not_logged_in"
   )] | length == 1
 ' <<<"$codex_mcp" >/dev/null
 
 claude mcp get plugin:s3-lab-workspace:s3-research-memory |
-  grep -Fq 'Status: ✔ Connected'
+  grep -Eq 'Status: .*Needs authentication'
 
 printf '%s\n' 'clean Codex and Claude install: PASS'
