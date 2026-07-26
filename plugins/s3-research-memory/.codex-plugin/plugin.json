@@ -1,0 +1,36 @@
+{
+  "name": "s3-research-memory",
+  "version": "0.1.0",
+  "description": "Search and extend the lab's shared S3 Research Memory through its registered MCP app.",
+  "author": {
+    "name": "mrcha033",
+    "url": "https://github.com/mrcha033"
+  },
+  "homepage": "https://github.com/mrcha033/s3wiki-marketplace",
+  "repository": "https://github.com/mrcha033/s3wiki-marketplace",
+  "keywords": [
+    "research-memory",
+    "lessons",
+    "evidence",
+    "mcp",
+    "mediawiki"
+  ],
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "S3 Research Memory",
+    "shortDescription": "Search and extend shared research lessons",
+    "longDescription": "Use the centrally operated S3 Research Memory MCP service to search lessons, inspect evidence and relations, and perform policy-controlled writes without creating a parallel data store.",
+    "developerName": "mrcha033",
+    "category": "Productivity",
+    "capabilities": [
+      "Research memory",
+      "Evidence retrieval",
+      "Policy-controlled writes"
+    ],
+    "websiteURL": "https://github.com/mrcha033/s3wiki-marketplace",
+    "defaultPrompt": [
+      "Search S3 Research Memory for lessons relevant to this task.",
+      "Save this evidence-backed lesson to S3 Research Memory."
+    ]
+  }
+}

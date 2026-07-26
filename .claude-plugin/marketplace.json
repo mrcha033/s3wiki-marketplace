@@ -25,6 +25,26 @@
         "template-native",
         "research"
       ]
+    },
+    {
+      "name": "s3-research-memory",
+      "displayName": "S3 Research Memory",
+      "source": "./plugins/s3-research-memory",
+      "description": "Search and extend the lab's shared S3 Research Memory through its central MCP service.",
+      "version": "0.1.0",
+      "author": {
+        "name": "mrcha033"
+      },
+      "homepage": "https://github.com/mrcha033/s3wiki-marketplace",
+      "repository": "https://github.com/mrcha033/s3wiki-marketplace",
+      "category": "productivity",
+      "tags": [
+        "research-memory",
+        "lessons",
+        "evidence",
+        "mcp",
+        "mediawiki"
+      ]
     }
   ]
 }
