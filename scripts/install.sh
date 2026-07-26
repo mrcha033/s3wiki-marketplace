@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 readonly MARKETPLACE_NAME="s3wiki-marketplace"
-readonly MARKETPLACE_URL="https://github.com/mrcha033/s3wiki-marketplace.git"
+readonly DEFAULT_MARKETPLACE_URL="https://github.com/mrcha033/s3wiki-marketplace.git"
+readonly MARKETPLACE_URL="${S3_LAB_MARKETPLACE_URL:-$DEFAULT_MARKETPLACE_URL}"
 readonly PLUGIN_ID="s3-lab-workspace@${MARKETPLACE_NAME}"
 
 usage() {

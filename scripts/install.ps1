@@ -1,12 +1,20 @@
 [CmdletBinding()]
 param(
     [ValidateSet("Auto", "Codex", "Claude", "All")]
-    [string]$Client = "Auto"
+    [string]$Client = "Auto",
+
+    [string]$MarketplaceUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
 $MarketplaceName = "s3wiki-marketplace"
-$MarketplaceUrl = "https://github.com/mrcha033/s3wiki-marketplace.git"
+if ([string]::IsNullOrWhiteSpace($MarketplaceUrl)) {
+    if (-not [string]::IsNullOrWhiteSpace($env:S3_LAB_MARKETPLACE_URL)) {
+        $MarketplaceUrl = $env:S3_LAB_MARKETPLACE_URL
+    } else {
+        $MarketplaceUrl = "https://github.com/mrcha033/s3wiki-marketplace.git"
+    }
+}
 $PluginId = "s3-lab-workspace@$MarketplaceName"
 
 function Test-Command {

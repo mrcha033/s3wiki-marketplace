@@ -29,11 +29,15 @@ Codex 앱을 따로 공유하지 않습니다.
 python3 tests/test_marketplace_packaging.py
 python3 -m unittest discover -s skills/build-lab-meeting-slides/tests
 bash -n scripts/install.sh
+S3_LAB_MARKETPLACE_URL="$PWD" bash tests/test_clean_install.sh
 claude plugin validate . --strict
 claude plugin validate plugins/s3-lab-workspace --strict
 ```
 
-그 뒤 기존 설정을 재사용하지 않는 임시 사용자 디렉터리에서 다음을 확인합니다.
+`test_clean_install.sh`는 기존 설정을 재사용하지 않는 임시 사용자 디렉터리에서 실제
+Codex와 Claude Code를 각각 두 번 설치해 최초 설치와 안전한 재실행을 함께 확인합니다.
+GitHub Actions도 고정된 지원 버전의 두 CLI로 이 검사를 실행합니다. 그 뒤 다음을
+확인합니다.
 
 1. 마켓플레이스 추가
 2. `s3-lab-workspace` 한 번 설치
@@ -43,6 +47,8 @@ claude plugin validate plugins/s3-lab-workspace --strict
 
 운영 서버가 GitHub OAuth 모드라면 이 단계에서 로그인 한 번을 완료합니다. 현재
 `open` 시험 운영은 별도 로그인이 없으므로, 운영 전환 완료로 간주하지 않습니다.
+로컬 소스를 사용한 자동 검사는 설치 동작을 검증하지만, 비공개 GitHub 저장소의 실제
+사용자 초대는 대신하지 않습니다.
 
 ## 릴리스 후
 
