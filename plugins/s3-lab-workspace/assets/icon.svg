@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">S3 Lab Workspace</title>
+  <defs>
+    <linearGradient id="bg" x1="24" y1="20" x2="230" y2="238" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#123B5D"/>
+      <stop offset="1" stop-color="#087E8B"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <path d="M58 71c0-11 9-20 20-20h100c11 0 20 9 20 20v67c0 11-9 20-20 20h-43v19h27a9 9 0 0 1 0 18H94a9 9 0 0 1 0-18h23v-19H78c-11 0-20-9-20-20V71Z" fill="#F8FBFC"/>
+  <path d="M79 79h98v51H79V79Z" fill="#DCEFF2"/>
+  <path d="M91 113c12-19 25-25 38-18 12 7 21 4 36-9" fill="none" stroke="#087E8B" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="91" cy="113" r="6" fill="#123B5D"/>
+  <circle cx="129" cy="95" r="6" fill="#123B5D"/>
+  <circle cx="165" cy="86" r="6" fill="#123B5D"/>
+</svg>

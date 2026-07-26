@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the private cross-platform marketplace contract."""
+"""Validate the unified private Codex and Claude marketplace package."""
 
 from __future__ import annotations
 
@@ -8,12 +8,19 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SLIDE_PLUGIN = "build-lab-meeting-slides"
-MEMORY_PLUGIN = "s3-research-memory"
-PLUGINS = [SLIDE_PLUGIN, MEMORY_PLUGIN]
-APP_KEY = "dev-6a58e7a411988191a74fda9cfcf6b604"
-APP_ID = "asdk_app_6a58e7a411988191a74fda9cfcf6b604"
+PLUGIN = "s3-lab-workspace"
+SLIDE_SKILL = "build-lab-meeting-slides"
+MCP_NAME = "s3-research-memory"
 MCP_URL = "https://s3wiki.yonsei.ac.kr/mcp"
+LEGACY_PLUGINS = ("build-lab-meeting-slides", "s3-research-memory")
+PERSONAL_APP_IDENTIFIERS = (
+    "dev-6a58e7a411988191a74fda9cfcf6b604",
+    "asdk_app_6a58e7a411988191a74fda9cfcf6b604",
+)
+
+
+def load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def files(root: Path) -> set[Path]:
@@ -25,50 +32,80 @@ def files(root: Path) -> set[Path]:
 
 
 def main() -> None:
-    codex = json.loads((ROOT / ".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
-    claude = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
-    assert [entry["name"] for entry in codex["plugins"]] == PLUGINS
-    assert [entry["name"] for entry in claude["plugins"]] == PLUGINS
-    for entry, plugin in zip(codex["plugins"], PLUGINS):
-        assert entry["source"]["path"] == f"./plugins/{plugin}"
-        assert entry["policy"] == {
-            "installation": "AVAILABLE",
-            "authentication": "ON_INSTALL",
-        }
-        assert entry["category"] == "Productivity"
-    for entry, plugin in zip(claude["plugins"], PLUGINS):
-        assert entry["source"] == f"./plugins/{plugin}"
+    codex_marketplace_path = ROOT / ".agents/plugins/marketplace.json"
+    claude_marketplace_path = ROOT / ".claude-plugin/marketplace.json"
+    codex_marketplace = load_json(codex_marketplace_path)
+    claude_marketplace = load_json(claude_marketplace_path)
 
-    source = ROOT / "skills" / SLIDE_PLUGIN
-    packaged = ROOT / "plugins" / SLIDE_PLUGIN / "skills" / SLIDE_PLUGIN
+    assert [entry["name"] for entry in codex_marketplace["plugins"]] == [PLUGIN]
+    assert [entry["name"] for entry in claude_marketplace["plugins"]] == [PLUGIN]
+    codex_entry = codex_marketplace["plugins"][0]
+    claude_entry = claude_marketplace["plugins"][0]
+    assert codex_entry["source"]["path"] == f"./plugins/{PLUGIN}"
+    assert codex_entry["policy"] == {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE",
+    }
+    assert codex_entry["category"] == "Productivity"
+    assert claude_entry["source"] == f"./plugins/{PLUGIN}"
+    assert claude_entry["version"] == "0.2.0"
+
+    plugin = ROOT / "plugins" / PLUGIN
+    codex_manifest_path = plugin / ".codex-plugin/plugin.json"
+    claude_manifest_path = plugin / ".claude-plugin/plugin.json"
+    mcp_path = plugin / ".mcp.json"
+    codex_manifest = load_json(codex_manifest_path)
+    claude_manifest = load_json(claude_manifest_path)
+    mcp = load_json(mcp_path)
+
+    assert codex_manifest["name"] == PLUGIN
+    assert codex_manifest["version"] == claude_manifest["version"] == "0.2.0"
+    assert codex_manifest["skills"] == "./skills/"
+    assert codex_manifest["mcpServers"] == "./.mcp.json"
+    assert "apps" not in codex_manifest
+    assert claude_manifest["name"] == PLUGIN
+    assert claude_manifest["skills"] == "./skills/"
+    assert "mcpServers" not in claude_manifest
+
+    assert set(mcp) == {"mcpServers"}
+    assert set(mcp["mcpServers"]) == {MCP_NAME}
+    server = mcp["mcpServers"][MCP_NAME]
+    assert server == {"type": "http", "url": MCP_URL}
+    assert "headers" not in server and "env" not in server
+
+    source = ROOT / "skills" / SLIDE_SKILL
+    packaged = plugin / "skills" / SLIDE_SKILL
     assert source.is_dir() and packaged.is_dir()
     assert not packaged.is_symlink()
     assert files(source) == files(packaged)
     for relative in files(source):
         assert (source / relative).read_bytes() == (packaged / relative).read_bytes(), relative
 
-    memory = ROOT / "plugins" / MEMORY_PLUGIN
-    codex_plugin = json.loads(
-        (memory / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+    interface = codex_manifest["interface"]
+    for asset in (
+        interface["composerIcon"],
+        interface["logo"],
+        *interface["screenshots"],
+    ):
+        assert (plugin / asset).is_file(), asset
+
+    active_documents = (
+        codex_marketplace_path,
+        claude_marketplace_path,
+        codex_manifest_path,
+        claude_manifest_path,
+        mcp_path,
     )
-    claude_plugin = json.loads(
-        (memory / ".claude-plugin/plugin.json").read_text(encoding="utf-8")
-    )
-    app_manifest = json.loads((memory / ".app.json").read_text(encoding="utf-8"))
+    active_text = "\n".join(path.read_text(encoding="utf-8") for path in active_documents)
+    assert all(identifier not in active_text for identifier in PERSONAL_APP_IDENTIFIERS)
+    for legacy in LEGACY_PLUGINS:
+        assert not (ROOT / "plugins" / legacy).exists()
 
-    assert codex_plugin["name"] == MEMORY_PLUGIN
-    assert codex_plugin["apps"] == "./.app.json"
-    assert "skills" not in codex_plugin
-    assert app_manifest == {"apps": {APP_KEY: {"id": APP_ID}}}
+    for installer in (ROOT / "scripts/install.sh", ROOT / "scripts/install.ps1"):
+        text = installer.read_text(encoding="utf-8")
+        assert PLUGIN in text and "S3RM_MCP_TOKEN" not in text
 
-    assert claude_plugin["name"] == MEMORY_PLUGIN
-    server = claude_plugin["mcpServers"][MEMORY_PLUGIN]
-    assert server["type"] == "http"
-    assert server["url"] == MCP_URL
-    assert server["headers"]["Authorization"] == "Bearer ${S3RM_MCP_TOKEN}"
-    assert not (memory / ".mcp.json").exists()
-
-    print("private marketplace packaging: PASS")
+    print("unified private marketplace packaging: PASS")
 
 
 if __name__ == "__main__":

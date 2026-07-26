@@ -1,39 +1,43 @@
-# Private integration boundary
+# 통합 배포와 인증 경계
 
-## Codex
+## 단일 플러그인
 
-The `s3-research-memory` Codex plugin references the user-created registered app
-identified by:
+신규 사용자는 `s3-lab-workspace` 하나만 설치합니다. 이 플러그인은 슬라이드 스킬과
+중앙 S3 Research Memory MCP 설정을 함께 포함합니다.
 
-```text
-asdk_app_6a58e7a411988191a74fda9cfcf6b604
-```
-
-The marketplace carries only the `.app.json` mapping. It does not copy, rehost,
-or claim to distribute the central MCP implementation. Installing the private
-plugin does not grant access to an account that cannot use the registered app.
-
-## Claude Code
-
-Claude Code cannot use the OpenAI app ID. Its plugin manifest declares the
-central Streamable HTTP endpoint directly:
+Codex와 Claude Code 모두 다음 주소를 직접 사용합니다.
 
 ```text
 https://s3wiki.yonsei.ac.kr/mcp
 ```
 
-The Authorization header references `S3RM_MCP_TOKEN` from the user's environment.
-The token value must never be committed.
+이전의 개인 등록 앱 `dev-6a58e7a411988191a74fda9cfcf6b604`와
+`asdk_app_6a58e7a411988191a74fda9cfcf6b604`는 신규 배포 경로에서 사용하지 않습니다.
+플러그인 설치와 개인 앱 공유가 따로 필요했던 경계를 제거했습니다.
 
-## S3 Research Memory policy
+## 인증
 
-The slide skill may use retrieved lessons or evidence as inputs, but it must not
-create a parallel database or write directly to MediaWiki. Use the central MCP
-service and its documented write/authentication policy. Never place MCP tokens,
-private wiki exports, or raw evidence dumps in this repository.
+플러그인은 비밀값을 포함하지 않으며 기본 연결에 환경변수를 요구하지 않습니다.
 
-## Validation boundary
+- 공개 시험 `open`: 설치 직후 연결됩니다.
+- 운영 `github`: 같은 MCP URL에서 클라이언트가 GitHub OAuth 로그인을 안내합니다.
+- 호환 `token`: 서버 담당자의 제한된 복구·직접 설정 경로이며 신규 사용자 기본값이
+  아닙니다.
 
-Private marketplace installation proves only that the plugin packages are
-discoverable and installable. MCP connectivity, write authorization, and deck
-quality require separate runtime and user-acceptance checks.
+운영 모드 변경은 서버 정책입니다. 클라이언트 플러그인이나 PPTX 자산을 다시 배포하지
+않습니다.
+
+## 저장소와 데이터
+
+PPTX 템플릿은 비공개 플러그인에 남습니다. 중앙 MCP 구현, 위키 데이터, 토큰,
+비공개 위키 export와 원본 evidence dump는 이 저장소에 넣지 않습니다.
+
+슬라이드 스킬은 검색된 Lesson과 evidence를 입력으로 사용할 수 있지만 별도 데이터베이스를
+만들거나 MediaWiki API에 직접 쓰지 않습니다. 모든 메모 작업은 중앙 MCP 정책을
+따릅니다.
+
+## 검증 경계
+
+패키지 검증은 구조와 설치 가능성을 확인합니다. 라이브 MCP 상태, 쓰기 권한,
+슬라이드 품질과 사용자 승인은 각각 별도로 확인합니다. 신규 사용자 릴리스 게이트는
+깨끗한 계정에서 단일 플러그인 설치와 읽기 전용 검색까지 재현하는 것입니다.
