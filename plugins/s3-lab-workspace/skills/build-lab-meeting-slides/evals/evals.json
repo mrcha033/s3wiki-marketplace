@@ -14,6 +14,9 @@
         "The frame map routes output slide 1 to source slide 1 and output slides 2 through 6 to source slide 2 using duplicate-slide reuse.",
         "The final authoring builder imports the prepared starter and exports the same presentation; it does not create a fresh presentation or fresh slides.",
         "New native editable elements are bounded by the inherited content zone and do not overlap inherited chrome.",
+        "All generated visible copy and notes pass the bundled English lexicon; titles are one-line 1-3 word keyword phrases rather than sentences.",
+        "Generated objects use only the closed semantic palette tokens, with no raw hex colors, gradients, shadows, or rotating section accents.",
+        "Every body slide has one dominant content-specific figure with declared visual/text roles and no decorative strapline or filler prose.",
         "LibreOffice is used only as a compatibility probe, never as the default final-source promotion path.",
         "Mechanical QA and two-pass full-slide visual review both pass with current deck, render, and source-manifest hashes."
       ]
@@ -26,9 +29,10 @@
         "assets/lab-meeting-template.pptx"
       ],
       "expectations": [
-        "Every output slide has a sequential slide number, title claim, narrative job, visual anchor, evidence references, notes reference, and template_frame object with routing rationale.",
+        "Every output slide has a sequential slide number, 1-3 word English keyword title in title_claim, narrative job, visual anchor, evidence references, notes reference, and template_frame object with routing rationale.",
         "Only approved source frames are duplicated; the longer output does not require or invent additional template layouts.",
-        "Each content slide has at least one native editable body implementation inside the declared safe zone rather than an empty placeholder shell.",
+        "Each content slide has one dominant native editable figure inside the declared safe zone, with semantic text/visual roles, a figure span of at least 50 percent, and visual-role area of at least 18 percent.",
+        "The complete deck uses one closed semantic palette and contains no filler subtitles, straplines, transition prose, or placeholder text.",
         "Cover, divider, closing, and appendix notes use their structural ranges, while mechanism and evidence slides use the 90 to 190 word range unless explicitly overridden.",
         "The coverage matrix and claims ledger account for all required topics and every evidence reference.",
         "Template fidelity QA verifies inherited chrome and title geometry across the full 12-slide output."
@@ -44,6 +48,7 @@
       "expectations": [
         "The route is explicitly labeled html-assisted-native and the HTML prototype is never treated as the final source of truth.",
         "The accepted composition is reconstructed as native editable text, shapes, lines, and connectors in the prepared template starter.",
+        "The prototype and native rebuild both use English keyword titles, the same closed semantic palette, and one figure-first composition without filler copy.",
         "The workflow rejects direct HTML to PPTX round-trip as the default because it would lose master, layout, placeholder, notes, or editability semantics.",
         "Any raster fallback is explicit, scoped, and marked partial or non-editable rather than silently used for the whole slide.",
         "The resulting PPTX preserves the supplied template chrome and passes both mechanical template-fidelity checks and full-slide visual review."

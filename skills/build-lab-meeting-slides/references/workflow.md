@@ -1,5 +1,17 @@
 # Template-native PPTX workflow
 
+## Contents
+
+- Project layout
+- Stage 0: environment and input intake
+- Stage 1: plan, design declaration, and frame map
+- Stage 2: evidence
+- Stage 3: native build
+- Stage 4: notes and compatibility
+- Stage 5: mechanical QA and dual review
+- HTML-assisted native branch
+- Stage 6: handoff
+
 ## Project layout
 
 `lab_slides.py init` creates one non-destructive project per deck:
@@ -46,7 +58,7 @@ The retained S3/Yonsei template is the default when `--template-pptx` is omitted
 
 ## Stage 1: plan, design declaration, and frame map
 
-Write the communication job, coverage matrix, and audience-facing narrative before layout. Review `content/design-system.json`: the template hash, inherited palette, Arial typography, locked chrome, section rhythm, visual-anchor strategy, signature, and anti-patterns must describe the approved source rather than invent a second visual system.
+Write the internal communication job, coverage matrix, and narrative before layout. Review `content/design-system.json`: keep the inherited source palette as provenance, approve one closed semantic body palette, preserve typography/chrome, and declare the figure strategy and anti-patterns. Generated visible copy and notes are English.
 
 Every schema-v2 slide-plan entry maps to a real source slide:
 
@@ -54,7 +66,7 @@ Every schema-v2 slide-plan entry maps to a real source slide:
 {
   "slide": 2,
   "narrative_job": "mechanism explanation",
-  "title_claim": "Compact lanes remove sparse-warp work",
+  "title_claim": "Lane Compaction",
   "template_frame": {
     "role": "content",
     "source_slide": 2,
@@ -67,10 +79,21 @@ Every schema-v2 slide-plan entry maps to a real source slide:
     "anchor_type": "mechanism",
     "family": "address-lanes",
     "content_basis": ["k2-time", "k2-instructions"],
-    "allow_underfill": false,
-    "underfill_rationale": "",
+    "focus_target": "compacted active lanes",
     "repeat_group": ""
   },
+  "native_elements": [
+    {
+      "type": "shape",
+      "name": "active-lanes",
+      "visual_role": "diagram-node",
+      "text_role": "figure-label",
+      "position": {"left": 150, "top": 175, "width": 950, "height": 350},
+      "fill": "soft",
+      "line": {"fill": "primary", "width": 2},
+      "text": "Active lanes"
+    }
+  ],
   "coverage": ["parallel reduction"],
   "evidence_refs": ["k2-time", "k2-instructions"],
   "notes_ref": "slide-02"
@@ -86,7 +109,7 @@ python3 scripts/lab_slides.py prepare-template /absolute/path/to/labdeck.json
 python3 scripts/lab_slides.py audit /absolute/path/to/labdeck.json
 ```
 
-`prepare-template` duplicates the mapped source slides into `work/template/template-starter.pptx`. `audit` rejects a stale template hash, stale frame map, missing starter, unbounded additions, incomplete communication decisions, and builders that create a fresh presentation. It also enforces the visual contract: body slides name their content-specific anchor, claim/source basis, and composition family; generic card/dashboard/icon/pill/tile families are rejected; repeated families/signatures and underfilled body zones require explicit rationale. The audit writes `reports/title-fit-preflight.json` and `reports/visual-contract.json`. A title that needs more lines than the inherited box permits fails before `finalize`; a missing measurement font is an explicit warning/skip that still requires visual closure.
+`prepare-template` duplicates the mapped source slides into `work/template/template-starter.pptx`. `audit` rejects a stale template hash, stale frame map, missing starter, unbounded additions, incomplete communication decisions, and builders that create a fresh presentation. It also enforces dictionary-backed English copy, keyword titles, role-bound visible copy, filler and word budgets, semantic palette tokens, a primary figure spanning at least 50% and occupying at least 18% of the body zone with authenticated information-bearing geometry, content/source basis, and composition diversity. Boundary/annotation rectangles do not count; plots need numeric or source-bound data and valid primitive axes when applicable. The audit writes `reports/title-fit-preflight.json`, `reports/content-contract.json`, and `reports/visual-contract.json`. A title that needs more lines than the inherited box permits fails before `finalize`; a missing measurement font is an explicit warning/skip that still requires visual closure.
 
 ## Stage 2: evidence
 
@@ -114,15 +137,13 @@ The builder imports the prepared starter and exports the edited presentation. It
 - `LABDECK_TEMPLATE_PROFILE`;
 - `LABDECK_DESIGN_SYSTEM`.
 
-Edit mapped inherited title/subtitle targets in place. Preserve the master/layout relationship, logo, rail, top rule, font metrics, paragraph spacing, insets, and image crops. Add native editable arrays, lanes, arrows, tables, charts, code deltas, and technical shapes only inside the approved body zone. If content does not fit, shorten, split, or remap it; do not hide the template under a slide-sized overlay.
-
-The worked example, if consulted for API syntax, is not a content or slide-count source.
+Edit mapped inherited title/subtitle targets in place. Preserve the master/layout relationship, logo, rail, top rule, font metrics, paragraph spacing, insets, and image crops. Add native editable arrays, lanes, arrows, tables, charts, code deltas, and technical shapes only inside the approved body zone. Use only semantic palette tokens. Every text-bearing element needs a `text_role`; every non-text element needs a `visual_role`. If content does not fit, shorten, split, or remap it; do not hide the template under a slide-sized overlay.
 
 ## Stage 4: notes and compatibility
 
 `finalize` writes an Artifact Tool PPTX, copies it to the visual stage by default, then attaches speaker notes to the final PPTX. Keep `build.compatibility_roundtrip: false` unless the user has explicitly accepted a proven conversion. LibreOffice may change paragraph margins, layout relationships, and object positions even when the package still opens.
 
-Use role-aware notes instead of padding every slide to one range:
+Write notes in English and use role-aware ranges instead of padding every slide:
 
 - cover/divider/closing: concise framing and transition;
 - mechanism/evidence: fuller explanation, provenance, and caveats;
@@ -137,8 +158,8 @@ Run `qa --skip-review-gate` to create full-size renders, a montage, package/over
 
 Dispatch two independent read-only reviewers against every full-size PNG:
 
-- Pass A: template fidelity, editability, frame-map integrity, visual-system provenance, claim truth, and anti-slop.
-- Pass B: audience comprehension, one-job hierarchy, mechanism-first reading, pacing, line breaks, and Korean/CJK integrity.
+- Pass A: template fidelity, editability, frame-map integrity, English copy, closed-palette provenance, claim truth, and anti-slop.
+- Pass B: keyword-title quality, audience comprehension, figure-first reading, consistent color semantics, label legibility, pacing, and overlap.
 
 Each report must quote the current deck SHA-256, render-manifest SHA-256, and source-manifest SHA-256. A material edit invalidates all three fingerprints and both reviews. After fixes, rerender and replace the stale reports, then run normal `qa`.
 

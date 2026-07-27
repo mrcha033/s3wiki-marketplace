@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 from typing import Any, Iterable
+import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -28,7 +29,6 @@ ASSETS_DIR = SKILL_DIR / "assets"
 HELPERS_DIR = Path(__file__).resolve().parent
 DEFAULT_TEMPLATE = ASSETS_DIR / "lab-meeting-template.pptx"
 STYLE_MANIFEST = ASSETS_DIR / "style-manifest.json"
-LEGACY_CUDA_REFERENCE = ASSETS_DIR / "cuda-visual-language-source.pptx"
 DEFAULT_FORBIDDEN_PRESERVED_NOTES = ("긴장하지 말자",)
 PROVENANCE_LABELS = {
     "cuda-events": "CUDA EVENTS",
@@ -42,13 +42,487 @@ PROVENANCE_LABELS = {
 SLIDE_RE = re.compile(r"^ppt/slides/slide(\d+)\.xml$")
 NOTES_RE = re.compile(r"^ppt/notesSlides/notesSlide(\d+)\.xml$")
 TITLE_FIT_WIDTH_TOLERANCE = 1.01
+DEFAULT_ACTIVE_PALETTE = {
+    "background": "#FFFFFF",
+    "surface": "#FFFFFF",
+    "ink": "#001233",
+    "muted": "#5C677D",
+    "primary": "#0353A4",
+    "focus": "#2269FE",
+    "soft": "#D2E1FE",
+}
+ACTIVE_PALETTE_TOKENS = tuple(DEFAULT_ACTIVE_PALETTE)
+DEFAULT_CONTENT_CONTRACT = {
+    "enabled": True,
+    "visible_language": "en",
+    "title_mode": "keyword-phrase",
+    "title_min_words": 1,
+    "title_max_words": 3,
+    "title_max_characters": 42,
+    "max_body_words": 45,
+    "max_callouts": 3,
+    "max_callout_words": 12,
+    "max_cover_metadata_words": 10,
+    "require_text_role": True,
+    "allowed_text_roles": [
+        "figure-label",
+        "axis-label",
+        "legend",
+        "callout",
+        "annotation",
+        "source",
+        "metadata",
+        "code",
+        "table",
+        "equation",
+    ],
+    "forbidden_visible_phrases": [
+        "lorem ipsum",
+        "click to add",
+        "replace me",
+        "sample text",
+        "slide title",
+        "meeting subject",
+        "mm dd yyyy",
+        "[audience]",
+        "[outcome]",
+        "[central takeaway]",
+    ],
+    "forbidden_content_fields": [
+        "subtitle",
+        "strapline",
+        "transition",
+        "summary",
+        "slogan",
+        "kicker",
+        "eyebrow",
+    ],
+}
 DEFAULT_VISUAL_CONTRACT = {
     "enabled": True,
     "max_repeated_composition": 2,
     "min_body_coverage_ratio": 0.16,
+    "min_figure_span_ratio": 0.50,
+    "min_figure_area_ratio": 0.18,
     "require_anchor_spec": True,
     "require_content_basis": True,
+    "require_primary_figure": True,
+    "require_visual_roles": True,
+    "allowed_visual_roles": [
+        "diagram-node",
+        "connector",
+        "data-mark",
+        "axis",
+        "plot",
+        "table",
+        "code",
+        "image",
+        "annotation",
+        "boundary",
+    ],
+    "diagram_anchor_types": [
+        "architecture",
+        "flow",
+        "mechanism",
+        "pipeline",
+        "process",
+        "system",
+    ],
+    "allowed_anchor_types": [
+        "architecture",
+        "bar",
+        "before-after",
+        "chart",
+        "code",
+        "code-delta",
+        "comparison",
+        "evidence",
+        "figure",
+        "flow",
+        "graph",
+        "image",
+        "line",
+        "matrix",
+        "mechanism",
+        "micrograph",
+        "paper-figure",
+        "photo",
+        "pipeline",
+        "plot",
+        "process",
+        "result",
+        "scatter",
+        "screenshot",
+        "system",
+        "table",
+        "trend",
+        "two-state",
+    ],
+    "minimum_diagram_nodes": 2,
+    "minimum_diagram_labels": 2,
+    "require_diagram_connector": True,
+    "forbidden_anchor_types": ["text", "prose", "paragraph", "bullet-list", "quote"],
     "forbidden_families": ["card-grid", "dashboard", "icon-grid", "pill-grid", "tile-grid"],
+    "require_palette_tokens": True,
+}
+NON_ENGLISH_SCRIPT_RE = re.compile(
+    "["
+    "\u0400-\u052f"  # Cyrillic
+    "\u0590-\u05ff"  # Hebrew
+    "\u0600-\u06ff"  # Arabic
+    "\u0900-\u097f"  # Devanagari
+    "\u0e00-\u0e7f"  # Thai
+    "\u1100-\u11ff"  # Hangul Jamo
+    "\u3040-\u30ff"  # Japanese kana
+    "\u3130-\u318f"  # Hangul compatibility Jamo
+    "\u3400-\u4dbf"  # CJK extension A
+    "\u4e00-\u9fff"  # CJK unified ideographs
+    "\uac00-\ud7af"  # Hangul syllables
+    "]"
+)
+TITLE_SENTENCE_WORDS = {
+    "we",
+    "our",
+    "ours",
+    "it",
+    "its",
+    "this",
+    "these",
+    "those",
+    "because",
+    "therefore",
+    "although",
+    "while",
+    "which",
+    "who",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "has",
+    "have",
+    "had",
+    "does",
+    "do",
+    "did",
+    "can",
+    "could",
+    "will",
+    "would",
+    "should",
+    "may",
+    "might",
+    "must",
+}
+TITLE_DECLARATIVE_VERBS = {
+    "add",
+    "adds",
+    "block",
+    "blocks",
+    "cause",
+    "causes",
+    "change",
+    "changes",
+    "control",
+    "controls",
+    "cut",
+    "cuts",
+    "decrease",
+    "decreases",
+    "determine",
+    "determines",
+    "dominate",
+    "dominates",
+    "drive",
+    "drives",
+    "enable",
+    "enables",
+    "exceed",
+    "exceeds",
+    "explain",
+    "explains",
+    "expose",
+    "exposes",
+    "improve",
+    "improves",
+    "increase",
+    "increases",
+    "limit",
+    "limits",
+    "match",
+    "matches",
+    "need",
+    "needs",
+    "outperform",
+    "outperforms",
+    "predict",
+    "predicts",
+    "prevent",
+    "prevents",
+    "preserve",
+    "preserves",
+    "reduce",
+    "reduces",
+    "remove",
+    "removes",
+    "reveal",
+    "reveals",
+    "scale",
+    "scales",
+    "shift",
+    "shifts",
+    "show",
+    "shows",
+    "yield",
+    "yields",
+    "absorb",
+    "absorbs",
+    "accelerate",
+    "accelerates",
+    "avoid",
+    "avoids",
+    "balance",
+    "balances",
+    "boost",
+    "boosts",
+    "bypass",
+    "bypasses",
+    "capture",
+    "captures",
+    "combine",
+    "combines",
+    "compress",
+    "compresses",
+    "consume",
+    "consumes",
+    "create",
+    "creates",
+    "eliminate",
+    "eliminates",
+    "fit",
+    "fits",
+    "hide",
+    "hides",
+    "mask",
+    "masks",
+    "merge",
+    "merges",
+    "minimize",
+    "minimizes",
+    "miss",
+    "misses",
+    "optimize",
+    "optimizes",
+    "raise",
+    "raises",
+    "save",
+    "saves",
+    "share",
+    "shares",
+    "simplify",
+    "simplifies",
+    "slow",
+    "slows",
+    "split",
+    "splits",
+    "stabilize",
+    "stabilizes",
+    "suppress",
+    "suppresses",
+    "use",
+    "uses",
+}
+TITLE_FINAL_DECLARATIVE_VERBS = {
+    "accelerate",
+    "accelerates",
+    "absorb",
+    "absorbs",
+    "avoid",
+    "avoids",
+    "boost",
+    "boosts",
+    "bypass",
+    "bypasses",
+    "cause",
+    "causes",
+    "compress",
+    "compresses",
+    "consume",
+    "consumes",
+    "cut",
+    "cuts",
+    "decrease",
+    "decreases",
+    "dominate",
+    "dominates",
+    "drive",
+    "drives",
+    "enable",
+    "enables",
+    "exceed",
+    "exceeds",
+    "explain",
+    "explains",
+    "expose",
+    "exposes",
+    "hide",
+    "hides",
+    "improve",
+    "improves",
+    "increase",
+    "increases",
+    "mask",
+    "masks",
+    "merge",
+    "merges",
+    "outperform",
+    "outperforms",
+    "predict",
+    "predicts",
+    "prevent",
+    "prevents",
+    "raise",
+    "raises",
+    "reduce",
+    "reduces",
+    "remove",
+    "removes",
+    "reveal",
+    "reveals",
+    "rise",
+    "rises",
+    "save",
+    "saves",
+    "scale",
+    "scales",
+    "share",
+    "shares",
+    "simplify",
+    "simplifies",
+    "slow",
+    "slows",
+    "suppress",
+    "suppresses",
+    "yield",
+    "yields",
+}
+TITLE_FINAL_DECLARATIVE_VERBS |= TITLE_DECLARATIVE_VERBS
+TITLE_IRREGULAR_PLURAL_SUBJECTS = {
+    "aircraft",
+    "alumni",
+    "bacteria",
+    "children",
+    "criteria",
+    "data",
+    "deer",
+    "feet",
+    "fish",
+    "fungi",
+    "geese",
+    "men",
+    "media",
+    "mice",
+    "nuclei",
+    "offspring",
+    "people",
+    "phenomena",
+    "sheep",
+    "stimuli",
+    "teeth",
+    "women",
+}
+TITLE_SAFE_FINAL_KEYWORDS = {
+    "addresses",
+    "advantages",
+    "alternatives",
+    "assumptions",
+    "benchmarks",
+    "bottlenecks",
+    "choices",
+    "constraints",
+    "contributions",
+    "costs",
+    "effects",
+    "experiments",
+    "findings",
+    "gains",
+    "goals",
+    "implications",
+    "issues",
+    "limitations",
+    "measurements",
+    "methods",
+    "misses",
+    "models",
+    "objectives",
+    "opportunities",
+    "questions",
+    "results",
+    "risks",
+    "sources",
+    "steps",
+    "systems",
+    "takeaways",
+    "tasks",
+    "tests",
+}
+FOREIGN_LANGUAGE_MARKERS = {
+    "antes",
+    "ausgang",
+    "chave",
+    "chiave",
+    "clave",
+    "comparacao",
+    "comparacion",
+    "comparaison",
+    "confronto",
+    "dados",
+    "daten",
+    "desempenho",
+    "despues",
+    "donnees",
+    "ergebnis",
+    "ergebnisse",
+    "explicacao",
+    "explicacion",
+    "geheugen",
+    "gegevens",
+    "latencia",
+    "latence",
+    "latentie",
+    "latenz",
+    "leistung",
+    "memoria",
+    "memoire",
+    "montre",
+    "mostra",
+    "muestra",
+    "prestazioni",
+    "prestaties",
+    "reducida",
+    "reducido",
+    "reduit",
+    "reduite",
+    "reduziert",
+    "rendimiento",
+    "resultat",
+    "resultats",
+    "resultado",
+    "resultados",
+    "risultati",
+    "risultato",
+    "schlussel",
+    "sleutel",
+    "spiegazione",
+    "speicher",
+    "transaccion",
+    "vergleich",
+    "vergelijking",
+    "verminderd",
+    "zeigt",
 }
 
 
@@ -76,6 +550,489 @@ def write_json(path: Path, value: Any) -> None:
 def write_text(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
+
+
+def normalize_hex_color(value: Any) -> str | None:
+    text = str(value or "").strip().upper()
+    if re.fullmatch(r"#[0-9A-F]{6}", text):
+        return text
+    return None
+
+
+def tint_hex(value: str, white_weight: float = 0.84) -> str:
+    normalized = normalize_hex_color(value) or "#0353A4"
+    weight = min(1.0, max(0.0, float(white_weight)))
+    channels = [int(normalized[index : index + 2], 16) for index in (1, 3, 5)]
+    mixed = [round(channel * (1 - weight) + 255 * weight) for channel in channels]
+    return "#" + "".join(f"{channel:02X}" for channel in mixed)
+
+
+def mix_hex(first: str, second: str, second_weight: float) -> str:
+    first_color = normalize_hex_color(first) or "#0353A4"
+    second_color = normalize_hex_color(second) or "#001233"
+    weight = min(1.0, max(0.0, float(second_weight)))
+    first_channels = [int(first_color[index : index + 2], 16) for index in (1, 3, 5)]
+    second_channels = [int(second_color[index : index + 2], 16) for index in (1, 3, 5)]
+    mixed = [
+        round(first_channel * (1 - weight) + second_channel * weight)
+        for first_channel, second_channel in zip(first_channels, second_channels)
+    ]
+    return "#" + "".join(f"{channel:02X}" for channel in mixed)
+
+
+def active_palette_for_profile(profile: dict[str, Any], retained_lab_template: bool) -> dict[str, str]:
+    if retained_lab_template and STYLE_MANIFEST.exists():
+        manifest = read_json(STYLE_MANIFEST)
+        configured = manifest.get("active_palette")
+        if isinstance(configured, dict):
+            normalized = {
+                str(key): color
+                for key, value in configured.items()
+                if (color := normalize_hex_color(value))
+            }
+            if normalized:
+                return normalized
+    colors = profile.get("theme", {}).get("colors", {})
+    colors = colors if isinstance(colors, dict) else {}
+    background = normalize_hex_color(colors.get("lt1")) or "#FFFFFF"
+    ink = normalize_hex_color(colors.get("dk1")) or "#111827"
+    primary = normalize_hex_color(colors.get("accent1")) or ink
+    focus = mix_hex(primary, ink, 0.16)
+    muted = mix_hex(ink, background, 0.58)
+    return {
+        "background": background,
+        "surface": background,
+        "ink": ink,
+        "muted": muted,
+        "primary": primary,
+        "focus": focus,
+        "soft": tint_hex(primary),
+    }
+
+
+def configured_active_palette(config: dict[str, Any]) -> dict[str, str]:
+    configured = config.get("style", {}).get("active_palette")
+    if not isinstance(configured, dict):
+        return dict(DEFAULT_ACTIVE_PALETTE)
+    normalized = {
+        str(key).strip(): color
+        for key, value in configured.items()
+        if str(key).strip() and (color := normalize_hex_color(value))
+    }
+    return normalized or dict(DEFAULT_ACTIVE_PALETTE)
+
+
+def active_palette_sha256(palette: dict[str, Any]) -> str:
+    normalized = {
+        token: normalize_hex_color(palette.get(token))
+        for token in ACTIVE_PALETTE_TOKENS
+    }
+    payload = json.dumps(
+        normalized,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def theme_colors_from_pptx(path: Path) -> dict[str, str]:
+    """Read the authoritative DrawingML theme colors from the PPTX package."""
+    drawing_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    with zipfile.ZipFile(path) as archive:
+        theme_names = sorted(
+            name
+            for name in archive.namelist()
+            if re.fullmatch(r"ppt/theme/theme\d+\.xml", name)
+        )
+        if not theme_names:
+            return {}
+        root = ET.fromstring(archive.read(theme_names[0]))
+    scheme = root.find(f".//{{{drawing_ns}}}clrScheme")
+    if scheme is None:
+        return {}
+    colors: dict[str, str] = {}
+    for entry in list(scheme):
+        token = entry.tag.rsplit("}", 1)[-1]
+        color_node = next(iter(entry), None)
+        if color_node is None:
+            continue
+        value = color_node.attrib.get("val")
+        normalized = normalize_hex_color(f"#{value}" if value else "")
+        if normalized is None:
+            fallback = color_node.attrib.get("lastClr")
+            normalized = normalize_hex_color(f"#{fallback}" if fallback else "")
+        if normalized:
+            colors[token] = normalized
+    return colors
+
+
+def active_palette_for_template(path: Path) -> dict[str, str]:
+    retained = path.resolve() == DEFAULT_TEMPLATE.resolve()
+    if not retained and path.is_file() and DEFAULT_TEMPLATE.is_file():
+        retained = sha256_file(path) == sha256_file(DEFAULT_TEMPLATE)
+    if retained and STYLE_MANIFEST.exists():
+        manifest = read_json(STYLE_MANIFEST)
+        raw = manifest.get("active_palette")
+        if isinstance(raw, dict):
+            normalized = {
+                token: normalize_hex_color(raw.get(token))
+                for token in ACTIVE_PALETTE_TOKENS
+            }
+            if all(normalized.values()):
+                return {token: str(normalized[token]) for token in ACTIVE_PALETTE_TOKENS}
+    colors = theme_colors_from_pptx(path)
+    background = normalize_hex_color(colors.get("lt1")) or "#FFFFFF"
+    ink = normalize_hex_color(colors.get("dk1")) or "#111827"
+    primary = normalize_hex_color(colors.get("accent1")) or ink
+    return {
+        "background": background,
+        "surface": background,
+        "ink": ink,
+        "muted": mix_hex(ink, background, 0.58),
+        "primary": primary,
+        "focus": mix_hex(primary, ink, 0.16),
+        "soft": tint_hex(primary),
+    }
+
+
+def active_palette_contract_errors(
+    config: dict[str, Any],
+    trusted_palette: dict[str, str] | None = None,
+) -> list[str]:
+    style = config.get("style", {})
+    raw = style.get("active_palette") if isinstance(style, dict) else None
+    if not isinstance(raw, dict):
+        return ["style.active_palette must contain the exact closed semantic token set"]
+    required = set(ACTIVE_PALETTE_TOKENS)
+    found = {str(key).strip() for key in raw}
+    errors: list[str] = []
+    if found != required:
+        missing = sorted(required - found)
+        extra = sorted(found - required)
+        detail = []
+        if missing:
+            detail.append("missing " + ", ".join(missing))
+        if extra:
+            detail.append("extra " + ", ".join(extra))
+        errors.append(
+            "style.active_palette must use exactly "
+            + ", ".join(ACTIVE_PALETTE_TOKENS)
+            + (" (" + "; ".join(detail) + ")" if detail else "")
+        )
+    normalized: dict[str, str] = {}
+    for token in ACTIVE_PALETTE_TOKENS:
+        color = normalize_hex_color(raw.get(token))
+        if color is None:
+            errors.append(f"style.active_palette.{token} must be a six-digit hex color")
+        else:
+            normalized[token] = color
+    if len(normalized) == len(ACTIVE_PALETTE_TOKENS):
+        recorded_hash = str(style.get("active_palette_sha256", "")).strip().casefold()
+        actual_hash = active_palette_sha256(normalized)
+        if recorded_hash != actual_hash:
+            errors.append(
+                "style.active_palette_sha256 does not match the closed active palette; rerun inspect-template"
+            )
+        if trusted_palette is not None:
+            expected = {
+                token: normalize_hex_color(trusted_palette.get(token))
+                for token in ACTIVE_PALETTE_TOKENS
+            }
+            if normalized != expected:
+                errors.append(
+                    "style.active_palette differs from the palette derived from the inspected template; rerun inspect-template"
+                )
+    return errors
+
+
+def text_word_count(value: Any) -> int:
+    return len(re.findall(r"[A-Za-z0-9]+(?:[-/+][A-Za-z0-9]+)*", str(value or "")))
+
+
+def contains_non_english_script(value: Any) -> bool:
+    return bool(NON_ENGLISH_SCRIPT_RE.search(str(value or "")))
+
+
+def foreign_language_hits(value: Any) -> list[str]:
+    normalized = unicodedata.normalize("NFKD", str(value or "").casefold())
+    ascii_words = re.findall(
+        r"[a-z]+",
+        "".join(character for character in normalized if not unicodedata.combining(character)),
+    )
+    return sorted(set(ascii_words) & FOREIGN_LANGUAGE_MARKERS)
+
+
+@lru_cache(maxsize=1)
+def english_lexicon() -> frozenset[str]:
+    words: set[str] = set()
+    for path in (
+        ASSETS_DIR / "english-words.txt",
+        ASSETS_DIR / "english-technical-terms.txt",
+    ):
+        if not path.is_file():
+            continue
+        words.update(
+            line.strip().casefold()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        )
+    return frozenset(words)
+
+
+@lru_cache(maxsize=1)
+def english_verb_forms() -> frozenset[str]:
+    """Load WordNet verb lemmas and irregular forms for title-clause checks."""
+    forms = set(TITLE_DECLARATIVE_VERBS) | set(TITLE_FINAL_DECLARATIVE_VERBS)
+    index_path = ASSETS_DIR / "english-verbs-wordnet-index.txt"
+    if index_path.is_file():
+        for raw_line in index_path.read_text(encoding="utf-8").splitlines():
+            if raw_line.startswith("  "):
+                continue
+            fields = raw_line.split()
+            if (
+                len(fields) >= 2
+                and fields[1] == "v"
+                and re.fullmatch(r"[a-z]+", fields[0])
+            ):
+                forms.add(fields[0])
+    exceptions_path = ASSETS_DIR / "english-verbs-wordnet-exceptions.txt"
+    if exceptions_path.is_file():
+        for raw_line in exceptions_path.read_text(encoding="utf-8").splitlines():
+            forms.update(
+                field
+                for field in raw_line.split()
+                if re.fullmatch(r"[a-z]+", field)
+            )
+    return frozenset(forms)
+
+
+@lru_cache(maxsize=1)
+def english_verb_inflected_forms() -> frozenset[str]:
+    """Load WordNet exceptional verb forms, excluding gerunds used as nouns."""
+    forms: set[str] = set()
+    exceptions_path = ASSETS_DIR / "english-verbs-wordnet-exceptions.txt"
+    if exceptions_path.is_file():
+        for raw_line in exceptions_path.read_text(encoding="utf-8").splitlines():
+            fields = [
+                field
+                for field in raw_line.split()
+                if re.fullmatch(r"[a-z]+", field)
+            ]
+            if len(fields) >= 2 and not fields[0].endswith("ing"):
+                forms.add(fields[0])
+    return frozenset(forms)
+
+
+@lru_cache(maxsize=1)
+def english_irregular_plural_forms() -> frozenset[str]:
+    """Load noun-exception plurals plus invariant scientific/common plurals."""
+    forms = set(TITLE_IRREGULAR_PLURAL_SUBJECTS)
+    exceptions_path = ASSETS_DIR / "english-nouns-wordnet-exceptions.txt"
+    if exceptions_path.is_file():
+        for raw_line in exceptions_path.read_text(encoding="utf-8").splitlines():
+            fields = [
+                field
+                for field in raw_line.split()
+                if re.fullmatch(r"[a-z]+", field)
+            ]
+            if len(fields) >= 2:
+                forms.add(fields[0])
+    return frozenset(forms)
+
+
+def english_word_candidates(word: str) -> set[str]:
+    candidates = {word}
+    if word.endswith("ies") and len(word) > 4:
+        candidates.add(word[:-3] + "y")
+    if word.endswith("ing") and len(word) > 4:
+        base = word[:-3]
+        candidates.update({base, base + "e"})
+        if len(base) > 2 and base[-1] == base[-2]:
+            candidates.add(base[:-1])
+    if word.endswith("ed") and len(word) > 4:
+        base = word[:-2]
+        candidates.update({base, base + "e"})
+        if len(base) > 2 and base[-1] == base[-2]:
+            candidates.add(base[:-1])
+    if word.endswith("es") and len(word) > 4:
+        candidates.update({word[:-2], word[:-1]})
+    if word.endswith("s") and len(word) > 3:
+        candidates.add(word[:-1])
+    if word.endswith("ly") and len(word) > 4:
+        candidates.add(word[:-2])
+    if word.endswith("er") and len(word) > 4:
+        candidates.add(word[:-2])
+    if word.endswith("est") and len(word) > 5:
+        candidates.add(word[:-3])
+    return candidates
+
+
+def title_word_is_verb(word: str) -> bool:
+    normalized = str(word).strip().casefold()
+    return bool(normalized and english_word_candidates(normalized) & english_verb_forms())
+
+
+def title_subject_is_plural(words: Iterable[str]) -> bool:
+    irregular_plurals = english_irregular_plural_forms()
+    return any(
+        (
+            word.casefold().endswith("s")
+            and not word.casefold().endswith(("ss", "us", "is"))
+        )
+        or word.casefold() in irregular_plurals
+        for word in words
+    )
+
+
+def title_finite_verb_hits(words: list[str]) -> set[str]:
+    """Find finite verb-like title tokens after the initial keyword position."""
+    hits: set[str] = set()
+    for index, raw_word in enumerate(words[1:], start=1):
+        word = raw_word.casefold()
+        if index == len(words) - 1 and word in TITLE_SAFE_FINAL_KEYWORDS:
+            continue
+        if word.endswith("ing") or not title_word_is_verb(word):
+            continue
+        third_person = word.endswith("s") and not word.endswith(("ss", "us", "is"))
+        past_tense = word.endswith("ed") or word in english_verb_inflected_forms()
+        plural_subject = title_subject_is_plural(words[:index])
+        if third_person or past_tense or plural_subject:
+            hits.add(word)
+    return hits
+
+
+def unknown_english_words(value: Any) -> list[str]:
+    lexicon = english_lexicon()
+    if not lexicon:
+        return ["<English lexicon unavailable>"]
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    normalized = "".join(
+        character for character in normalized if not unicodedata.combining(character)
+    )
+    unknown: set[str] = set()
+    for token in re.findall(r"[A-Za-z][A-Za-z0-9_+./-]*", normalized):
+        for part in re.split(r"[_+./-]+", token):
+            if not part or len(part) == 1:
+                continue
+            if any(character.isdigit() for character in part):
+                continue
+            word = part.casefold()
+            if not (english_word_candidates(word) & lexicon):
+                unknown.add(part)
+    return sorted(unknown, key=str.casefold)
+
+
+def english_copy_issues(value: Any) -> list[str]:
+    issues: list[str] = []
+    if contains_non_english_script(value):
+        issues.append("non-English script")
+    markers = foreign_language_hits(value)
+    if markers:
+        issues.append("non-English vocabulary: " + ", ".join(markers))
+    unknown = unknown_english_words(value)
+    if unknown:
+        issues.append("words absent from the English lexicon: " + ", ".join(unknown))
+    return issues
+
+
+def filler_hits(value: Any, phrases: Iterable[Any]) -> list[str]:
+    text = str(value or "").casefold()
+    hits = [str(phrase) for phrase in phrases if str(phrase).strip() and str(phrase).casefold() in text]
+    if re.search(r"\b(?:todo|tbd)\b", text):
+        hits.append("TODO/TBD")
+    if re.search(r"\binsert\s+(?:title|text|figure|chart|content|name|date)\b", text):
+        hits.append("insert placeholder")
+    return sorted(set(hits))
+
+
+def native_text_records(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    elements = entry.get("native_elements", [])
+    if not isinstance(elements, list):
+        return records
+    for index, element in enumerate(elements):
+        if not isinstance(element, dict) or element.get("text") is None:
+            continue
+        records.append(
+            {
+                "index": index,
+                "text": str(element.get("text", "")),
+                "text_role": str(element.get("text_role", "")).strip().casefold(),
+            }
+        )
+    return records
+
+
+def planned_language_exceptions(plan: dict[str, Any]) -> set[str]:
+    exceptions: set[str] = set()
+    for entry in plan.get("slides", []):
+        if not isinstance(entry, dict):
+            continue
+        for record in native_text_records(entry):
+            if record["text_role"] in {"source", "code", "equation"}:
+                text = str(record["text"]).strip()
+                if text:
+                    exceptions.add(text)
+                    exceptions.update(fragment for fragment in text.split() if fragment)
+        content = entry.get("content")
+        if isinstance(content, dict):
+            role = str(entry.get("template_frame", {}).get("role", "")).casefold()
+            for field, value in content.items():
+                field_name = re.sub(r"[-_\s]+", "", str(field).strip().casefold())
+                is_cover_metadata = role == "cover" and field_name in {
+                    "subtitle",
+                    "meetingsubject",
+                    "date",
+                    "author",
+                }
+                if (
+                    field_name not in {"source", "citation", "code", "equation"}
+                    and not is_cover_metadata
+                ):
+                    continue
+                text = str(value).strip()
+                if text:
+                    exceptions.add(text)
+                    exceptions.update(fragment for fragment in text.split() if fragment)
+    return exceptions
+
+
+def resolve_declared_color(value: Any, palette: dict[str, str]) -> tuple[str | None, str | None]:
+    text = str(value or "").strip()
+    if not text or text.casefold() == "none":
+        return None, None
+    token = text[1:] if text.startswith("$") else text
+    if token in palette:
+        return token, palette[token]
+    normalized = normalize_hex_color(text)
+    if normalized:
+        matching = next((name for name, color in palette.items() if color == normalized), None)
+        return matching, normalized
+    return None, None
+
+
+def native_color_records(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    elements = entry.get("native_elements", [])
+    if not isinstance(elements, list):
+        return records
+    for index, element in enumerate(elements):
+        if not isinstance(element, dict):
+            continue
+        candidates = [
+            ("fill", element.get("fill")),
+            ("line.fill", element.get("line", {}).get("fill") if isinstance(element.get("line"), dict) else None),
+            ("style.color", element.get("style", {}).get("color") if isinstance(element.get("style"), dict) else None),
+            (
+                "textStyle.color",
+                element.get("textStyle", {}).get("color") if isinstance(element.get("textStyle"), dict) else None,
+            ),
+        ]
+        for field, value in candidates:
+            if value is not None and str(value).strip().casefold() != "none":
+                records.append({"index": index, "field": field, "value": str(value).strip()})
+    return records
 
 
 def newest_existing(paths: Iterable[Path]) -> Path | None:
@@ -145,10 +1102,21 @@ def run_command(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     print("+ " + shlex.join(command), file=sys.stderr)
+    command_env = dict(env) if env is not None else os.environ.copy()
+    runtime_dirs: list[str] = []
+    for executable in (find_python(), find_node()):
+        if executable:
+            parent = str(executable.parent)
+            if parent not in runtime_dirs:
+                runtime_dirs.append(parent)
+    existing_path = command_env.get("PATH", "")
+    command_env["PATH"] = os.pathsep.join(
+        runtime_dirs + ([existing_path] if existing_path else [])
+    )
     result = subprocess.run(
         command,
         cwd=str(cwd) if cwd else None,
-        env=env,
+        env=command_env,
         text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
@@ -684,32 +1652,785 @@ def _visual_composition_signature(entry: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json_bytes(normalized)).hexdigest()[:16]
 
 
+def _figure_metrics(
+    entry: dict[str, Any],
+    zone: tuple[float, float, float, float] | None,
+    allowed_visual_roles: set[str],
+    basis_ids: set[str],
+    anchor_type: str,
+    diagram_anchor_types: set[str],
+) -> tuple[float | None, float | None, list[str]]:
+    if zone is None:
+        return None, None, []
+    span_rects: list[tuple[float, float, float, float]] = []
+    area_rects: list[tuple[float, float, float, float]] = []
+    roles: list[str] = []
+    raw_elements = entry.get("native_elements", [])
+    if not isinstance(raw_elements, list):
+        return 0.0, 0.0, roles
+    elements = [element for element in raw_elements if isinstance(element, dict)]
+    plot_axes, plot_marks = _primitive_plot_parts(elements, zone, basis_ids)
+    plot_axis_ids = {id(element) for element in plot_axes}
+    plot_mark_ids = {id(element) for element in plot_marks}
+    plot_anchors = {"bar", "chart", "graph", "line", "plot", "scatter", "trend"}
+    table_anchors = {"matrix", "table"}
+    image_anchors = {"image", "micrograph", "paper-figure", "photo", "screenshot"}
+    code_anchors = {"code", "code-delta"}
+    if anchor_type in diagram_anchor_types:
+        contributing_roles = {"diagram-node", "connector"}
+    elif anchor_type in plot_anchors:
+        contributing_roles = {"axis", "data-mark", "plot"}
+    elif anchor_type in table_anchors:
+        contributing_roles = {"table"}
+    elif anchor_type in image_anchors:
+        contributing_roles = {"image"}
+    elif anchor_type in code_anchors:
+        contributing_roles = {"code"}
+    else:
+        contributing_roles = {
+            "diagram-node",
+            "connector",
+            "axis",
+            "data-mark",
+            "plot",
+            "table",
+            "image",
+            "code",
+        }
+    for element in elements:
+        role = str(element.get("visual_role", "")).strip().casefold()
+        if role not in allowed_visual_roles or role not in contributing_roles:
+            continue
+        include_span = False
+        include_area = False
+        if role == "diagram-node" and _is_nontext_visual_element(element):
+            include_span = include_area = True
+        elif role == "connector" and _is_connector_element(element):
+            include_span = True
+        elif role == "axis" and id(element) in plot_axis_ids:
+            include_span = True
+        elif role == "data-mark" and id(element) in plot_mark_ids:
+            include_span = include_area = True
+        elif role == "plot" and _is_authentic_plot_element(element, basis_ids):
+            include_span = include_area = True
+        elif role == "table" and _is_authentic_table_element(element, basis_ids):
+            include_span = include_area = True
+        elif role == "image" and _is_authentic_image_element(element, basis_ids):
+            include_span = include_area = True
+        elif role == "code" and _is_authentic_code_element(element):
+            include_span = include_area = True
+        if not include_span:
+            continue
+        rect = _visual_rect(element.get("position") or element.get("bbox"))
+        clipped = _clip_visual_rect(rect, zone) if rect else None
+        if clipped:
+            span_rects.append(clipped)
+            if include_area:
+                area_rects.append(clipped)
+            roles.append(role)
+    if not span_rects:
+        return 0.0, 0.0, roles
+    left = min(rect[0] for rect in span_rects)
+    top = min(rect[1] for rect in span_rects)
+    right = max(rect[0] + rect[2] for rect in span_rects)
+    bottom = max(rect[1] + rect[3] for rect in span_rects)
+    span = max(0.0, right - left) * max(0.0, bottom - top)
+    zone_area = zone[2] * zone[3]
+    if zone_area <= 0:
+        return None, None, roles
+    return span / zone_area, _visual_union_area(area_rects) / zone_area, roles
+
+
+def _structured_visual_point_count(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return int(math.isfinite(float(value)))
+    if isinstance(value, list):
+        if not value:
+            return 0
+        return sum(_structured_visual_point_count(item) for item in value)
+    if isinstance(value, dict):
+        if not value:
+            return 0
+        nested = [
+            _structured_visual_point_count(item)
+            for item in value.values()
+            if isinstance(item, (list, dict))
+        ]
+        if any(nested):
+            return sum(nested)
+        numeric_values = [
+            item
+            for item in value.values()
+            if not isinstance(item, bool)
+            and isinstance(item, (int, float))
+            and math.isfinite(float(item))
+        ]
+        return 1 if numeric_values else 0
+    return 0
+
+
+def _has_structured_visual_data(element: dict[str, Any], keys: Iterable[str]) -> bool:
+    return any(
+        _structured_visual_point_count(element.get(key)) >= 2
+        for key in keys
+    )
+
+
+def _structured_table_cell_count(value: Any) -> int:
+    if isinstance(value, list):
+        return sum(_structured_table_cell_count(item) for item in value)
+    if isinstance(value, dict):
+        return sum(_structured_table_cell_count(item) for item in value.values())
+    if isinstance(value, bool):
+        return 1
+    if isinstance(value, (int, float)):
+        return int(math.isfinite(float(value)))
+    if isinstance(value, str):
+        return int(bool(value.strip()))
+    return 0
+
+
+def _has_structured_table_data(element: dict[str, Any], keys: Iterable[str]) -> bool:
+    return any(_structured_table_cell_count(element.get(key)) >= 2 for key in keys)
+
+
+def _has_bound_visual_reference(
+    element: dict[str, Any],
+    keys: Iterable[str],
+    basis_ids: set[str],
+) -> bool:
+    return any(
+        isinstance(element.get(key), str)
+        and str(element.get(key)).strip() in basis_ids
+        for key in keys
+    )
+
+
+def _visual_element_type(element: dict[str, Any]) -> str:
+    return str(element.get("type") or element.get("kind") or "").strip().casefold()
+
+
+def _is_nontext_visual_element(element: dict[str, Any]) -> bool:
+    return _visual_element_type(element) not in {"", "text", "textbox"}
+
+
+def _is_connector_element(element: dict[str, Any]) -> bool:
+    element_type = _visual_element_type(element)
+    geometry = str(element.get("geometry", "")).strip().casefold()
+    return element_type in {"line", "path"} or (
+        element_type == "shape"
+        and geometry
+        in {
+            "arrow",
+            "bentarrow",
+            "chevron",
+            "downarrow",
+            "leftarrow",
+            "line",
+            "rightarrow",
+            "uparrow",
+        }
+    )
+
+
+def _is_authentic_image_element(
+    element: dict[str, Any],
+    basis_ids: set[str],
+) -> bool:
+    return (
+        str(element.get("visual_role", "")).strip().casefold() == "image"
+        and _visual_element_type(element)
+        in {"image", "picture", "photo", "screenshot", "micrograph"}
+        and _has_bound_visual_reference(
+            element,
+            ("source_ref", "image_ref", "asset_id", "data_ref"),
+            basis_ids,
+        )
+    )
+
+
+def _is_authentic_table_element(
+    element: dict[str, Any],
+    basis_ids: set[str],
+) -> bool:
+    return (
+        str(element.get("visual_role", "")).strip().casefold() == "table"
+        and _visual_element_type(element) in {"table", "matrix"}
+        and (
+            _has_structured_table_data(element, ("rows", "cells", "data"))
+            or _has_bound_visual_reference(
+                element,
+                ("data_ref", "source_ref"),
+                basis_ids,
+            )
+        )
+    )
+
+
+def _is_authentic_plot_element(
+    element: dict[str, Any],
+    basis_ids: set[str],
+) -> bool:
+    return (
+        str(element.get("visual_role", "")).strip().casefold() == "plot"
+        and _visual_element_type(element) in {"chart", "plot", "graph"}
+        and (
+            _has_structured_visual_data(element, ("series", "data"))
+            or _has_bound_visual_reference(
+                element,
+                ("data_ref", "source_ref"),
+                basis_ids,
+            )
+        )
+    )
+
+
+def _is_authentic_code_element(element: dict[str, Any]) -> bool:
+    code_payload = any(
+        bool(str(element.get(key, "")).strip())
+        for key in ("text", "code", "source")
+    ) or (
+        isinstance(element.get("lines"), list)
+        and any(bool(str(line).strip()) for line in element["lines"])
+    )
+    return (
+        str(element.get("visual_role", "")).strip().casefold() == "code"
+        and code_payload
+        and (
+            _visual_element_type(element) in {"code", "code-block"}
+            or (
+                str(element.get("text_role", "")).strip().casefold() == "code"
+                and bool(str(element.get("text", "")).strip())
+            )
+        )
+    )
+
+
+def _axis_orientation(
+    element: dict[str, Any],
+    zone: tuple[float, float, float, float] | None,
+) -> str | None:
+    element_type = _visual_element_type(element)
+    geometry = str(element.get("geometry", "")).strip().casefold()
+    if element_type not in {"line", "path"} and geometry not in {
+        "line",
+        "straightline",
+    }:
+        return None
+    rect = _visual_rect(element.get("position") or element.get("bbox"))
+    if rect is None:
+        return None
+    if zone is not None:
+        rect = _clip_visual_rect(rect, zone)
+        if rect is None:
+            return None
+    _, _, width, height = rect
+    if width >= height * 4:
+        return "horizontal"
+    if height >= width * 4:
+        return "vertical"
+    return None
+
+
+def _is_meaningful_data_mark(
+    element: dict[str, Any],
+    basis_ids: set[str],
+) -> bool:
+    if (
+        str(element.get("visual_role", "")).strip().casefold() != "data-mark"
+        or not _is_nontext_visual_element(element)
+    ):
+        return False
+    if _has_bound_visual_reference(
+        element,
+        ("data_ref", "source_ref", "series_ref"),
+        basis_ids,
+    ):
+        return True
+    return any(
+        _structured_visual_point_count(element.get(key)) >= 1
+        for key in ("value", "values", "point", "points", "series", "data", "x", "y")
+    )
+
+
+def _primitive_plot_parts(
+    elements: list[dict[str, Any]],
+    zone: tuple[float, float, float, float] | None,
+    basis_ids: set[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    axes = [
+        element
+        for element in elements
+        if str(element.get("visual_role", "")).strip().casefold() == "axis"
+        and _axis_orientation(element, zone) is not None
+    ]
+    orientations = {_axis_orientation(element, zone) for element in axes}
+    marks = [
+        element
+        for element in elements
+        if _is_meaningful_data_mark(element, basis_ids)
+        and (
+            zone is None
+            or (
+                (rect := _visual_rect(element.get("position") or element.get("bbox")))
+                is not None
+                and _clip_visual_rect(rect, zone) is not None
+            )
+        )
+    ]
+    if not {"horizontal", "vertical"}.issubset(orientations):
+        axes = []
+    return axes, marks
+
+
+def _figure_structure_issues(
+    entry: dict[str, Any],
+    anchor_type: str,
+    diagram_anchor_types: set[str],
+    minimum_diagram_nodes: int,
+    minimum_diagram_labels: int,
+    require_diagram_connector: bool,
+    zone: tuple[float, float, float, float] | None,
+    basis_ids: set[str],
+) -> tuple[list[str], dict[str, Any]]:
+    """Reject semantic-role labels that are not backed by figure structure."""
+    raw_elements = entry.get("native_elements", [])
+    elements = [item for item in raw_elements if isinstance(item, dict)] if isinstance(raw_elements, list) else []
+    role_counts: dict[str, int] = {}
+    text_role_counts: dict[str, int] = {}
+    for element in elements:
+        visual_role = str(element.get("visual_role", "")).strip().casefold()
+        text_role = str(element.get("text_role", "")).strip().casefold()
+        if visual_role:
+            role_counts[visual_role] = role_counts.get(visual_role, 0) + 1
+        if text_role and str(element.get("text", "")).strip():
+            text_role_counts[text_role] = text_role_counts.get(text_role, 0) + 1
+
+    diagram_nodes = [
+        element
+        for element in elements
+        if str(element.get("visual_role", "")).strip().casefold() == "diagram-node"
+        and _is_nontext_visual_element(element)
+    ]
+    authentic_connectors = [
+        element
+        for element in elements
+        if str(element.get("visual_role", "")).strip().casefold() == "connector"
+        and _is_connector_element(element)
+    ]
+    authentic_images = [
+        element for element in elements if _is_authentic_image_element(element, basis_ids)
+    ]
+    authentic_tables = [
+        element for element in elements if _is_authentic_table_element(element, basis_ids)
+    ]
+    declared_plots = [
+        element for element in elements if _is_authentic_plot_element(element, basis_ids)
+    ]
+    primitive_axes, primitive_marks = _primitive_plot_parts(elements, zone, basis_ids)
+    primitive_plot = len(primitive_axes) >= 2 and len(primitive_marks) >= 2
+    authentic_code = [
+        element for element in elements if _is_authentic_code_element(element)
+    ]
+    diagram_labels = (
+        text_role_counts.get("figure-label", 0)
+        + text_role_counts.get("annotation", 0)
+        + text_role_counts.get("callout", 0)
+    )
+    diagram_ready = (
+        len(diagram_nodes) >= minimum_diagram_nodes
+        and (
+            not require_diagram_connector
+            or len(authentic_connectors) >= 1
+        )
+        and diagram_labels >= minimum_diagram_labels
+    )
+    authentic_plot = bool(declared_plots) or primitive_plot
+    authentic_alternates = (
+        len(authentic_images)
+        + len(authentic_tables)
+        + int(authentic_plot)
+        + len(authentic_code)
+    )
+
+    plot_anchors = {"bar", "chart", "graph", "line", "plot", "scatter", "trend"}
+    table_anchors = {"matrix", "table"}
+    image_anchors = {"image", "micrograph", "paper-figure", "photo", "screenshot"}
+    code_anchors = {"code", "code-delta"}
+    comparison_anchors = {"before-after", "comparison", "two-state"}
+    general_anchors = {"evidence", "figure", "result"}
+    issues: list[str] = []
+    if anchor_type in diagram_anchor_types:
+        if len(diagram_nodes) < minimum_diagram_nodes:
+            issues.append(
+                f"diagram anchor needs at least {minimum_diagram_nodes} non-text diagram-node elements"
+            )
+        if require_diagram_connector and len(authentic_connectors) < 1:
+            issues.append("diagram anchor needs at least one line/path/arrow connector")
+        if diagram_labels < minimum_diagram_labels:
+            issues.append(
+                f"diagram anchor needs at least {minimum_diagram_labels} concise figure labels"
+            )
+    elif anchor_type in plot_anchors:
+        if not authentic_plot:
+            issues.append(
+                "plot anchor requires a data-backed chart/plot object or at least two axes and two data-mark elements"
+            )
+    elif anchor_type in table_anchors:
+        if not authentic_tables:
+            issues.append("table anchor requires a data-backed table/matrix object")
+    elif anchor_type in image_anchors:
+        if not authentic_images:
+            issues.append("image anchor requires an image object with an explicit source reference")
+    elif anchor_type in code_anchors:
+        if not authentic_code:
+            issues.append("code anchor requires a nonempty editable code object")
+    elif anchor_type in comparison_anchors:
+        if not diagram_ready and authentic_alternates < 2:
+            issues.append(
+                "comparison anchor requires two labeled states or at least two structurally valid visual components"
+            )
+    elif anchor_type in general_anchors:
+        if not diagram_ready and not authentic_alternates:
+            issues.append(
+                "figure anchor requires a labeled diagram or a structurally valid image, plot, table, or code figure"
+            )
+    summary = {
+        "role_counts": role_counts,
+        "text_role_counts": text_role_counts,
+        "diagram_ready": diagram_ready,
+        "authentic_diagram_nodes": len(diagram_nodes),
+        "authentic_connectors": len(authentic_connectors),
+        "authentic_images": len(authentic_images),
+        "authentic_tables": len(authentic_tables),
+        "authentic_plots": len(declared_plots) + int(primitive_plot),
+        "authentic_plot_axes": len(primitive_axes),
+        "authentic_data_marks": len(primitive_marks),
+        "authentic_code": len(authentic_code),
+    }
+    return issues, summary
+
+
+def _pinned_contract_errors(
+    configured: dict[str, Any],
+    defaults: dict[str, Any],
+    label: str,
+) -> list[str]:
+    errors: list[str] = []
+    for key, expected in defaults.items():
+        if key not in configured:
+            errors.append(f"{label}.{key} is required and pinned by the skill")
+            continue
+        if canonical_json_bytes(configured.get(key)) != canonical_json_bytes(expected):
+            errors.append(
+                f"{label}.{key} is pinned by the skill and may not be changed in project configuration"
+            )
+    return errors
+
+
+def content_contract_audit(
+    config: dict[str, Any],
+    plan: dict[str, Any],
+    notes: Any = None,
+) -> dict[str, Any]:
+    """Enforce English, keyword-title, and no-filler visible-copy rules."""
+    configured = config.get("qa", {}).get("content_contract")
+    if not isinstance(configured, dict):
+        if config.get("schema_version") == 2:
+            return {
+                "status": "fail",
+                "checks": [],
+                "errors": ["qa.content_contract is required for schema_version 2"],
+                "warnings": [],
+            }
+        return {
+            "status": "legacy-warning",
+            "checks": [],
+            "errors": [],
+            "warnings": ["content contract is absent; rerun init to enable English, title, and filler gates"],
+        }
+    if configured.get("enabled") is False:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": [
+                "qa.content_contract may not be disabled; apply only the specific user-authorized rule change"
+            ],
+            "warnings": [],
+        }
+    pinned_errors = _pinned_contract_errors(
+        configured,
+        DEFAULT_CONTENT_CONTRACT,
+        "qa.content_contract",
+    )
+    if pinned_errors:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": pinned_errors,
+            "warnings": [],
+        }
+    settings = dict(DEFAULT_CONTENT_CONTRACT)
+
+    try:
+        title_min_words = int(settings.get("title_min_words", 1))
+        title_max_words = int(settings.get("title_max_words", 3))
+        title_max_characters = int(settings.get("title_max_characters", 42))
+        max_body_words = int(settings.get("max_body_words", 45))
+        max_callouts = int(settings.get("max_callouts", 3))
+        max_callout_words = int(settings.get("max_callout_words", 12))
+        max_cover_metadata_words = int(settings.get("max_cover_metadata_words", 10))
+    except (TypeError, ValueError):
+        title_min_words, title_max_words, title_max_characters = 1, 3, 42
+        max_body_words, max_callouts, max_callout_words, max_cover_metadata_words = 45, 3, 12, 10
+    if (
+        title_min_words < 1
+        or title_max_words < title_min_words
+        or title_max_characters < 1
+        or max_body_words < 0
+        or max_callouts < 0
+        or max_callout_words < 1
+        or max_cover_metadata_words < 1
+    ):
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": ["qa.content_contract thresholds are invalid"],
+            "warnings": [],
+        }
+
+    allowed_text_roles = {
+        str(value).strip().casefold()
+        for value in settings.get("allowed_text_roles", [])
+        if str(value).strip()
+    }
+    forbidden_phrases = settings.get("forbidden_visible_phrases", [])
+    errors: list[str] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+    for entry in plan.get("slides", []):
+        if not isinstance(entry, dict):
+            continue
+        slide = entry.get("slide")
+        if not isinstance(slide, int):
+            continue
+        title = str(entry.get("title_claim", "")).strip()
+        title_words = re.findall(r"[A-Za-z0-9]+(?:[-/+][A-Za-z0-9]+)*", title)
+        folded_words = {word.casefold() for word in title_words}
+        language_issues = english_copy_issues(title)
+        if language_issues:
+            errors.append(
+                f"slide {slide} title must use English visible copy ({'; '.join(language_issues)})"
+            )
+        if "\n" in title or "\r" in title:
+            errors.append(f"slide {slide} title must be a single-line keyword phrase")
+        if not title_min_words <= len(title_words) <= title_max_words:
+            errors.append(
+                f"slide {slide} title has {len(title_words)} words; expected a {title_min_words}-{title_max_words} word keyword phrase"
+            )
+        if len(title) > title_max_characters:
+            errors.append(
+                f"slide {slide} title has {len(title)} characters; maximum is {title_max_characters}"
+            )
+        if re.search(r"[.!?:;]\s*$", title) or any(mark in title for mark in ("!", "?", ";", ":")):
+            errors.append(f"slide {slide} title must not use sentence punctuation")
+        if folded_words & TITLE_SENTENCE_WORDS:
+            markers = ", ".join(sorted(folded_words & TITLE_SENTENCE_WORDS))
+            errors.append(f"slide {slide} title reads as a clause, not keywords: {markers}")
+        finite_title_verbs = title_finite_verb_hits(title_words)
+        if finite_title_verbs:
+            markers = ", ".join(sorted(finite_title_verbs))
+            errors.append(
+                f"slide {slide} title reads as a declarative sentence, not keywords: {markers}"
+            )
+        title_filler = filler_hits(title, forbidden_phrases)
+        if title_filler:
+            errors.append(f"slide {slide} title contains filler or placeholder copy: {', '.join(title_filler)}")
+
+        records = native_text_records(entry)
+        body_words = 0
+        callouts = 0
+        for record in records:
+            label = f"slide {slide} native_elements[{record['index']}]"
+            text = record["text"]
+            text_role = record["text_role"]
+            words = text_word_count(text)
+            body_words += words
+            if settings.get("require_text_role", True) and text_role not in allowed_text_roles:
+                errors.append(
+                    f"{label} text_role must be one of {sorted(allowed_text_roles)}"
+                )
+            if text_role == "callout":
+                callouts += 1
+                if words > max_callout_words:
+                    errors.append(
+                        f"{label} callout has {words} words; maximum is {max_callout_words}"
+                    )
+            if text_role not in {"source", "code", "equation"}:
+                language_issues = english_copy_issues(text)
+                if language_issues:
+                    errors.append(
+                        f"{label} must use English visible copy ({'; '.join(language_issues)})"
+                    )
+            hits = filler_hits(text, forbidden_phrases)
+            if hits:
+                errors.append(f"{label} contains filler or placeholder copy: {', '.join(hits)}")
+        role = str(entry.get("template_frame", {}).get("role", "content")).casefold()
+        for field in (
+            "title",
+            "deck_title",
+            "headline",
+            "subtitle",
+            "strapline",
+            "footer",
+            "blurb",
+            "body",
+            "caption",
+        ):
+            if isinstance(entry.get(field), str):
+                errors.append(
+                    f"slide {slide} top-level {field} is not reachable visible copy; use title_claim or a role-tagged native element"
+                )
+        content = entry.get("content")
+        if isinstance(content, dict):
+            title_content_fields = {"titleclaim"}
+            provenance_content_fields = {"source", "citation", "code", "equation"}
+            allowed_content_fields = title_content_fields | provenance_content_fields
+            if role == "cover":
+                allowed_content_fields |= {
+                    "subtitle",
+                    "meetingsubject",
+                    "date",
+                    "author",
+                }
+            forbidden_fields = {
+                re.sub(r"[-_\s]+", "", str(value).strip().casefold())
+                for value in settings.get("forbidden_content_fields", [])
+                if str(value).strip()
+            }
+            for field, value in content.items():
+                if not isinstance(value, str):
+                    continue
+                label = f"slide {slide} content.{field}"
+                field_name = re.sub(r"[-_\s]+", "", str(field).strip().casefold())
+                cover_metadata = role == "cover" and field_name in {
+                    "subtitle",
+                    "meetingsubject",
+                    "date",
+                    "author",
+                }
+                if field_name not in allowed_content_fields:
+                    errors.append(
+                        f"{label} is an undeclared visible-copy field; use a role-tagged native element or speaker notes"
+                    )
+                if field_name in forbidden_fields and not cover_metadata:
+                    errors.append(
+                        f"{label} is a forbidden filler field; remove the extra visible copy"
+                    )
+                if cover_metadata and text_word_count(value) > max_cover_metadata_words:
+                    errors.append(
+                        f"{label} has more than {max_cover_metadata_words} words; keep cover metadata compact"
+                    )
+                if field_name not in title_content_fields:
+                    body_words += text_word_count(value)
+                if (
+                    field_name not in {"source", "citation", "code", "equation"}
+                    and not cover_metadata
+                ):
+                    language_issues = english_copy_issues(value)
+                    if language_issues:
+                        errors.append(
+                            f"{label} must use English visible copy ({'; '.join(language_issues)})"
+                        )
+                hits = filler_hits(value, forbidden_phrases)
+                if hits:
+                    errors.append(f"{label} contains filler or placeholder copy: {', '.join(hits)}")
+        if role not in {"cover", "divider", "appendix"} and body_words > max_body_words:
+            errors.append(
+                f"slide {slide} declares {body_words} visible body words; maximum is {max_body_words}; move explanation to notes"
+            )
+        if callouts > max_callouts:
+            errors.append(f"slide {slide} has {callouts} callouts; maximum is {max_callouts}")
+        checks.append(
+            {
+                "slide": slide,
+                "title": title,
+                "title_words": len(title_words),
+                "title_characters": len(title),
+                "body_words": body_words,
+                "callouts": callouts,
+            }
+        )
+
+    raw_notes = notes if notes is not None else []
+    note_entries = raw_notes if isinstance(raw_notes, list) else raw_notes.get("slides", []) if isinstance(raw_notes, dict) else []
+    for index, note in enumerate(note_entries, start=1):
+        if isinstance(note, str):
+            slide, text = index, note
+        elif isinstance(note, dict):
+            slide = note.get("slide", index)
+            text = str(note.get("text", ""))
+        else:
+            continue
+        language_issues = english_copy_issues(text)
+        if language_issues:
+            errors.append(
+                f"slide {slide} speaker notes must use English ({'; '.join(language_issues)})"
+            )
+        hits = filler_hits(text, forbidden_phrases)
+        if hits:
+            errors.append(f"slide {slide} speaker notes contain filler or placeholder copy: {', '.join(hits)}")
+
+    status = "fail" if errors else "pass" if checks else "not-applicable"
+    return {"status": status, "checks": checks, "errors": errors, "warnings": warnings}
+
+
 def visual_contract_audit(
     config: dict[str, Any],
     plan: dict[str, Any],
     frame_map: dict[str, Any],
+    trusted_palette: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Enforce an auditable anti-repetition and content-anchor contract for new projects."""
     configured = config.get("qa", {}).get("visual_contract")
     if not isinstance(configured, dict):
+        if config.get("schema_version") == 2:
+            return {
+                "status": "fail",
+                "checks": [],
+                "errors": ["qa.visual_contract is required for schema_version 2"],
+                "warnings": [],
+            }
         return {
             "status": "legacy-warning",
             "checks": [],
             "errors": [],
             "warnings": ["visual contract is absent; rerun init to enable anti-repetition and content-anchor gates"],
         }
+    if configured.get("enabled") is False:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": [
+                "qa.visual_contract may not be disabled; apply only the specific user-authorized rule change"
+            ],
+            "warnings": [],
+        }
+    pinned_errors = _pinned_contract_errors(
+        configured,
+        DEFAULT_VISUAL_CONTRACT,
+        "qa.visual_contract",
+    )
+    if pinned_errors:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": pinned_errors,
+            "warnings": [],
+        }
     settings = dict(DEFAULT_VISUAL_CONTRACT)
-    settings.update(configured)
-    if settings.get("enabled") is False:
-        reason = str(settings.get("disabled_reason", "")).strip()
-        if not reason:
-            return {
-                "status": "fail",
-                "checks": [],
-                "errors": ["qa.visual_contract.enabled=false requires a concrete disabled_reason"],
-                "warnings": [],
-            }
-        return {"status": "disabled", "checks": [], "errors": [], "warnings": [f"visual contract disabled: {reason}"]}
 
     try:
         max_repeated = int(settings.get("max_repeated_composition", 2))
@@ -719,7 +2440,30 @@ def visual_contract_audit(
         minimum_coverage = float(settings.get("min_body_coverage_ratio", 0.16))
     except (TypeError, ValueError):
         minimum_coverage = 0.16
-    if max_repeated < 1 or not 0 <= minimum_coverage <= 1:
+    try:
+        minimum_figure_span = float(settings.get("min_figure_span_ratio", 0.50))
+    except (TypeError, ValueError):
+        minimum_figure_span = 0.50
+    try:
+        minimum_figure_area = float(settings.get("min_figure_area_ratio", 0.18))
+    except (TypeError, ValueError):
+        minimum_figure_area = 0.18
+    try:
+        minimum_diagram_nodes = int(settings.get("minimum_diagram_nodes", 2))
+    except (TypeError, ValueError):
+        minimum_diagram_nodes = 2
+    try:
+        minimum_diagram_labels = int(settings.get("minimum_diagram_labels", 2))
+    except (TypeError, ValueError):
+        minimum_diagram_labels = 2
+    if (
+        max_repeated < 1
+        or not 0 <= minimum_coverage <= 1
+        or not 0 <= minimum_figure_span <= 1
+        or not 0 <= minimum_figure_area <= 1
+        or minimum_diagram_nodes < 1
+        or minimum_diagram_labels < 1
+    ):
         return {
             "status": "fail",
             "checks": [],
@@ -731,6 +2475,32 @@ def visual_contract_audit(
         for value in settings.get("forbidden_families", [])
         if str(value).strip()
     }
+    forbidden_anchor_types = {
+        str(value).strip().casefold()
+        for value in settings.get("forbidden_anchor_types", [])
+        if str(value).strip()
+    }
+    allowed_visual_roles = {
+        str(value).strip().casefold()
+        for value in settings.get("allowed_visual_roles", [])
+        if str(value).strip()
+    }
+    diagram_anchor_types = {
+        str(value).strip().casefold()
+        for value in settings.get("diagram_anchor_types", [])
+        if str(value).strip()
+    }
+    allowed_anchor_types = {
+        str(value).strip().casefold()
+        for value in settings.get("allowed_anchor_types", [])
+        if str(value).strip()
+    }
+    palette = configured_active_palette(config)
+    known_source_ids = {
+        str(item.get("id", "")).strip()
+        for item in config.get("sources", [])
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    }
     mappings = frame_map.get("outputSlides", []) if isinstance(frame_map, dict) else []
     mapping_by_slide = {
         item.get("outputSlide"): item
@@ -739,6 +2509,12 @@ def visual_contract_audit(
     }
     errors: list[str] = []
     warnings: list[str] = []
+    errors.extend(
+        active_palette_contract_errors(
+            config,
+            trusted_palette if trusted_palette is not None else DEFAULT_ACTIVE_PALETTE,
+        )
+    )
     checks: list[dict[str, Any]] = []
     signature_slides: dict[str, list[int]] = {}
     signature_specs: dict[str, list[dict[str, Any]]] = {}
@@ -751,6 +2527,7 @@ def visual_contract_audit(
             continue
         role = str(entry.get("template_frame", {}).get("role", "content")).casefold()
         spec = entry.get("visual_contract")
+        basis_items: list[str] = []
         if settings.get("require_anchor_spec", True) and role not in {"cover", "divider"}:
             if not isinstance(spec, dict):
                 errors.append(f"slide {slide} is missing visual_contract: declare anchor_type, family, content_basis, and underfill policy")
@@ -762,12 +2539,38 @@ def visual_contract_audit(
             basis_items = [str(item).strip() for item in basis_items if str(item).strip()]
             if not anchor_type:
                 errors.append(f"slide {slide} visual_contract.anchor_type is required")
+            elif anchor_type in forbidden_anchor_types:
+                errors.append(
+                    f"slide {slide} uses text-led anchor_type {anchor_type!r}; declare a figure, diagram, plot, table, code delta, or evidence image"
+                )
+            elif anchor_type not in allowed_anchor_types:
+                errors.append(
+                    f"slide {slide} visual_contract.anchor_type {anchor_type!r} is unsupported; use one of {sorted(allowed_anchor_types)}"
+                )
             if not family:
                 errors.append(f"slide {slide} visual_contract.family is required")
             if family in forbidden_families:
                 errors.append(f"slide {slide} uses forbidden generic composition family {family!r}")
             if settings.get("require_content_basis", True) and not basis_items:
                 errors.append(f"slide {slide} visual_contract.content_basis must identify the supplied research/source basis")
+            if spec.get("allow_underfill") is True:
+                errors.append(
+                    f"slide {slide} may not self-authorize underfill; use a divider role when no body figure is appropriate"
+                )
+            if spec.get("allow_figure_exception") is True:
+                errors.append(
+                    f"slide {slide} may not self-authorize a figure exception; every body slide requires a primary figure"
+                )
+            evidence_ids = {
+                str(item).strip()
+                for item in entry.get("evidence_refs", [])
+                if str(item).strip()
+            }
+            unknown_basis = sorted(set(basis_items) - known_source_ids - evidence_ids)
+            if unknown_basis:
+                errors.append(
+                    f"slide {slide} visual_contract.content_basis contains unknown source/evidence IDs: {', '.join(unknown_basis)}"
+                )
             if family:
                 if family_run and family_run[-1][0] == family:
                     family_run.append((family, family_run[-1][1] + 1))
@@ -784,20 +2587,110 @@ def visual_contract_audit(
         mapping = mapping_by_slide.get(slide, {})
         add_targets = [item for item in mapping.get("editTargets", []) if isinstance(item, dict) and item.get("action") == "add"]
         zone = _visual_rect(add_targets[0].get("zone")) if add_targets else None
-        rects = []
-        for element in entry.get("native_elements", []) if isinstance(entry.get("native_elements", []), list) else []:
-            rect = _visual_rect(element.get("position") or element.get("bbox")) if isinstance(element, dict) else None
-            clipped = _clip_visual_rect(rect, zone) if rect and zone else None
-            if clipped:
-                rects.append(clipped)
-        coverage_ratio = _visual_union_area(rects) / (zone[2] * zone[3]) if zone else None
-        underfill_allowed = bool(spec.get("allow_underfill")) if isinstance(spec, dict) else False
-        underfill_reason = str(spec.get("underfill_rationale", "")).strip() if isinstance(spec, dict) else ""
-        if role not in {"cover", "divider", "closing", "appendix"} and coverage_ratio is not None and coverage_ratio < minimum_coverage:
+        elements = entry.get("native_elements", []) if isinstance(entry.get("native_elements", []), list) else []
+        for index, element in enumerate(elements):
+            if not isinstance(element, dict):
+                continue
+            element_type = str(element.get("type") or element.get("kind") or "").strip().casefold()
+            visual_role = str(element.get("visual_role", "")).strip().casefold()
+            if (
+                settings.get("require_visual_roles", True)
+                and element_type not in {"text", "textbox"}
+                and visual_role not in allowed_visual_roles
+            ):
+                errors.append(
+                    f"slide {slide} native_elements[{index}].visual_role must be one of {sorted(allowed_visual_roles)}"
+                )
+            if "shadow" in element:
+                errors.append(f"slide {slide} native_elements[{index}] uses a forbidden shadow")
+            fill_value = element.get("fill")
+            if isinstance(fill_value, dict) and any(
+                key in fill_value for key in ("gradient", "stops", "angle")
+            ):
+                errors.append(f"slide {slide} native_elements[{index}] uses a forbidden gradient")
+        focus_used = False
+        for record in native_color_records(entry):
+            token, resolved = resolve_declared_color(record["value"], palette)
+            label = f"slide {slide} native_elements[{record['index']}].{record['field']}"
+            if resolved is None or token is None:
+                errors.append(
+                    f"{label} uses {record['value']!r}; use one of the active palette tokens {sorted(palette)}"
+                )
+                continue
+            if settings.get("require_palette_tokens", True) and normalize_hex_color(record["value"]):
+                errors.append(
+                    f"{label} uses a raw hex color; use the semantic palette token {token!r}"
+                )
+            if token == "focus":
+                focus_used = True
+        if focus_used and isinstance(spec, dict) and not str(spec.get("focus_target", "")).strip():
+            errors.append(f"slide {slide} uses the focus color without visual_contract.focus_target")
+        figure_span_ratio, figure_area_ratio, figure_roles = _figure_metrics(
+            entry,
+            zone,
+            allowed_visual_roles,
+            set(basis_items),
+            str(spec.get("anchor_type", "")).strip().casefold()
+            if isinstance(spec, dict)
+            else "",
+            diagram_anchor_types,
+        )
+        coverage_ratio = figure_area_ratio
+        figure_exception = False
+        figure_exception_reason = ""
+        figure_structure: dict[str, Any] = {}
+        if (
+            isinstance(spec, dict)
+            and not (figure_exception and figure_exception_reason)
+        ):
+            structure_issues, figure_structure = _figure_structure_issues(
+                entry,
+                str(spec.get("anchor_type", "")).strip().casefold(),
+                diagram_anchor_types,
+                minimum_diagram_nodes,
+                minimum_diagram_labels,
+                bool(settings.get("require_diagram_connector", True)),
+                zone,
+                set(basis_items),
+            )
+            errors.extend(f"slide {slide} {message}" for message in structure_issues)
+        underfill_allowed = False
+        underfill_reason = ""
+        body_requires_figure = role not in {"cover", "divider", "closing", "appendix"}
+        if (
+            settings.get("require_primary_figure", True)
+            and body_requires_figure
+            and zone is None
+            and (not figure_exception or not figure_exception_reason)
+        ):
+            errors.append(
+                f"slide {slide} has no bounded figure zone; declare an add target or a justified figure exception"
+            )
+        if body_requires_figure and coverage_ratio is not None and coverage_ratio < minimum_coverage:
             if not underfill_allowed or not underfill_reason:
                 errors.append(
                     f"slide {slide} body coverage is {coverage_ratio:.3f}, below {minimum_coverage:.3f}; add a content-specific visual or an explicit underfill_rationale"
                 )
+        if (
+            settings.get("require_primary_figure", True)
+            and body_requires_figure
+            and figure_span_ratio is not None
+            and figure_span_ratio < minimum_figure_span
+            and (not figure_exception or not figure_exception_reason)
+        ):
+            errors.append(
+                f"slide {slide} primary-figure span is {figure_span_ratio:.3f}, below {minimum_figure_span:.3f}; enlarge the content-specific figure or declare a justified figure exception"
+            )
+        if (
+            settings.get("require_primary_figure", True)
+            and body_requires_figure
+            and figure_area_ratio is not None
+            and figure_area_ratio < minimum_figure_area
+            and (not figure_exception or not figure_exception_reason)
+        ):
+            errors.append(
+                f"slide {slide} primary-figure area is {figure_area_ratio:.3f}, below {minimum_figure_area:.3f}; enlarge the information-bearing visual geometry"
+            )
         checks.append(
             {
                 "slide": slide,
@@ -806,7 +2699,12 @@ def visual_contract_audit(
                 "composition_family": str(spec.get("family", "")) if isinstance(spec, dict) else None,
                 "anchor_type": str(spec.get("anchor_type", "")) if isinstance(spec, dict) else None,
                 "body_coverage_ratio": round(coverage_ratio, 4) if coverage_ratio is not None else None,
+                "figure_span_ratio": round(figure_span_ratio, 4) if figure_span_ratio is not None else None,
+                "figure_area_ratio": round(figure_area_ratio, 4) if figure_area_ratio is not None else None,
+                "figure_roles": sorted(set(figure_roles)),
+                "figure_structure": figure_structure,
                 "underfill_allowed": underfill_allowed,
+                "figure_exception_allowed": figure_exception,
             }
         )
     for signature, slides in signature_slides.items():
@@ -926,7 +2824,11 @@ def derive_template_profile(paths: dict[str, Path]) -> dict[str, Any]:
                     if record.get("kind") not in ("slide", "notes")
                 ],
                 "locked_inherited_elements": [
-                    {key: element.get(key) for key in ("kind", "id", "name", "bbox") if element.get(key) is not None}
+                    {
+                        key: element.get(key)
+                        for key in ("kind", "id", "name", "bbox", "text")
+                        if element.get(key) is not None
+                    }
                     for element in inherited
                     if element is not body
                 ],
@@ -1010,14 +2912,25 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
         retained_integrity.get("verified")
         and profile["source_sha256"] == retained_integrity.get("actual_sha256")
     )
+    active_palette = active_palette_for_template(paths["pptx"])
+    style["active_palette"] = active_palette
+    style["active_palette_sha256"] = active_palette_sha256(active_palette)
+    inherited_language_exceptions = sorted(
+        {
+            str(text).strip()
+            for text in pptx_package_stats(paths["pptx"]).get("text_runs", [])
+            if str(text).strip()
+        }
+    )
+    style["language_exceptions"] = inherited_language_exceptions
     if retained_lab_template:
-        default_thesis = "A disciplined Yonsei S3 research canvas: quiet white space, locked navy/blue lab chrome, and one mechanism-first visual anchor per content slide."
-        default_system = "Clone the supplied cover for slide 1 and the supplied content frame for all body slides; preserve the top rule, left rail, S3 mark, title geometry, Arial typography, and theme colors; use the inherited body zone for native editable research content."
-        default_signature = "locked S3/Yonsei chrome plus a single editable technical mechanism inside the inherited body zone"
+        default_thesis = "A quiet scientific editorial canvas: locked Yonsei S3 chrome, one blue system, short English keyword titles, and one dominant research figure per content slide."
+        default_system = "Clone the supplied cover for slide 1 and the content frame for body slides; preserve inherited chrome and typography; use only the closed semantic palette and native editable figures inside the body zone."
+        default_signature = "locked S3/Yonsei chrome plus one large editable research figure with a single blue focus"
     else:
-        default_thesis = "A disciplined research canvas that preserves the supplied template identity and gives each content slide one audience-readable visual anchor."
-        default_system = f"Clone only inspected source frames; preserve inherited chrome, title geometry, {preferred_body} typography, and theme colors; add native editable research content only inside declared safe zones."
-        default_signature = "locked inherited template chrome plus one editable technical mechanism inside the approved content zone"
+        default_thesis = "A disciplined research canvas that preserves the supplied template identity, uses concise English keyword titles, and gives each content slide one dominant figure."
+        default_system = f"Clone only inspected source frames; preserve inherited chrome and {preferred_body} typography; use the closed semantic palette and native editable figures only inside declared safe zones."
+        default_signature = "locked inherited template chrome plus one dominant editable research figure inside the approved content zone"
     design_path = project / "content/design-system.json"
     design = read_json(design_path) if design_path.exists() else {}
     preserve_design_declaration = design.get("template_sha256") == profile["source_sha256"]
@@ -1027,15 +2940,24 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
             "template_sha256": profile["source_sha256"],
             "visual_thesis": design.get("visual_thesis") if preserve_design_declaration and design.get("visual_thesis") else default_thesis,
             "system_declaration": design.get("system_declaration") if preserve_design_declaration and design.get("system_declaration") else default_system,
-            "palette": profile.get("theme", {}).get("colors", {}),
+            "palette": active_palette,
+            "source_palette": profile.get("theme", {}).get("colors", {}),
+            "palette_policy": {
+                "mode": "closed-semantic",
+                "rule": "Use named active-palette tokens only; keep one blue focus and no rotating section colors.",
+            },
             "typefaces": template_fonts,
             "signature": design.get("signature") if preserve_design_declaration and design.get("signature") else default_signature,
             "anti_patterns": [
                 "generic card dashboards",
                 "decorative pills or metric strips",
                 "unapproved gradients and shadows",
+                "sentence headlines or multiline titles",
+                "decorative straplines, subtitles, or transition prose",
+                "raw hex colors or rotating accent colors",
+                "text-only body slides without a dominant figure",
                 "full-slide raster wrappers in native mode",
-                "a second template or the bundled CUDA style mixed into this deck",
+                "a second template or unrelated visual language mixed into this deck",
             ],
         }
     )
@@ -1047,7 +2969,9 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
         f"SHA256: {profile['source_sha256']}",
         f"Slides: {profile['slide_count']}",
         "Fonts: " + (", ".join(template_fonts) or "theme references only"),
-        "Palette: " + ", ".join(f"{key}={value}" for key, value in profile.get("theme", {}).get("colors", {}).items()),
+        "Active palette: " + ", ".join(f"{key}={value}" for key, value in active_palette.items()),
+        "Source theme colors (provenance only): "
+        + ", ".join(f"{key}={value}" for key, value in profile.get("theme", {}).get("colors", {}).items()),
         "Contract: duplicate source slides; edit inherited targets; add only inside declared safe zones.",
     ]
     for slide in profile.get("slides", []):
@@ -1099,9 +3023,55 @@ def pptx_package_stats(path: Path) -> dict[str, Any]:
             "notes_part_count": len(notes_names),
             "fonts": sorted(fonts),
             "visible_text": "\n".join(visible_text),
+            "text_runs": text_runs,
             "code_label_count": sum(1 for text in text_runs if text == "CODE"),
             "empty_placeholder_shapes": empty_placeholder_shapes,
         }
+
+
+def final_visible_copy_errors(
+    config: dict[str, Any],
+    package: dict[str, Any],
+    planned_exceptions: Iterable[str] = (),
+) -> list[str]:
+    configured = config.get("qa", {}).get("content_contract")
+    if not isinstance(configured, dict):
+        return (
+            ["qa.content_contract is required for schema_version 2"]
+            if config.get("schema_version") == 2
+            else []
+        )
+    if configured.get("enabled", True) is False:
+        return ["qa.content_contract may not be disabled"]
+    settings = dict(DEFAULT_CONTENT_CONTRACT)
+    settings.update(configured)
+    inherited_raw = config.get("style", {}).get("language_exceptions", [])
+    inherited_values = inherited_raw if isinstance(inherited_raw, list) else []
+    exceptions = {
+        str(value).strip()
+        for value in (
+            inherited_values + list(planned_exceptions)
+        )
+        if str(value).strip()
+    }
+    phrases = settings.get("forbidden_visible_phrases", [])
+    errors: list[str] = []
+    for index, value in enumerate(package.get("text_runs", []), start=1):
+        text = str(value).strip()
+        if not text:
+            continue
+        language_exception = text in exceptions
+        language_issues = english_copy_issues(text)
+        if language_issues and not language_exception:
+            errors.append(
+                f"final visible text run {index} is not English ({'; '.join(language_issues)}): {text!r}"
+            )
+        hits = filler_hits(text, phrases)
+        if hits:
+            errors.append(
+                f"final visible text run {index} contains filler or placeholder copy: {', '.join(hits)}"
+            )
+    return errors
 
 
 def pptx_notes_text_by_slide(path: Path) -> dict[int, str]:
@@ -1232,6 +3202,12 @@ def validate_notes_contract(
                 errors.append(
                     f"slide {slide_number} preserve-mode note contains forbidden template/sample text: {matched!r}"
                 )
+            language_issues = english_copy_issues(inherited)
+            if language_issues:
+                errors.append(
+                    f"slide {slide_number} preserve-mode speaker notes must use English "
+                    f"({'; '.join(language_issues)})"
+                )
     return errors
 
 
@@ -1327,6 +3303,9 @@ def command_doctor(_: argparse.Namespace) -> int:
         "artifact_workspace_helper": bool(artifact_helper and artifact_helper.exists()),
         "template_helpers": template_helpers_ok,
         "default_template_integrity": bool(default_integrity.get("verified")),
+        "english_lexicon": len(english_lexicon()) > 100000,
+        "english_verb_lexicon": len(english_verb_forms()) > 10000,
+        "english_irregular_plurals": len(english_irregular_plural_forms()) > 1000,
     }
     optional_checks = {
         "libreoffice_package_notes_probe": bool(soffice),
@@ -1344,6 +3323,9 @@ def command_doctor(_: argparse.Namespace) -> int:
         "artifact_workspace_helper": str(artifact_helper) if artifact_helper else None,
         "template_helpers": str(template_scripts) if template_scripts else None,
         "default_template": str(DEFAULT_TEMPLATE) if DEFAULT_TEMPLATE.exists() else None,
+        "english_lexicon_words": len(english_lexicon()),
+        "english_verb_forms": len(english_verb_forms()),
+        "english_irregular_plural_forms": len(english_irregular_plural_forms()),
         "default_template_sha256": sha256_file(DEFAULT_TEMPLATE) if DEFAULT_TEMPLATE.exists() else None,
         "default_template_integrity": default_integrity,
         "core": {"checks": core_checks, "missing": missing_core},
@@ -1380,11 +3362,15 @@ def profile_slide(profile: dict[str, Any], role: str | None, source_slide: int |
 
 def default_edit_targets(frame: dict[str, Any]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
-    for key, content_ref in (
-        ("title_target", "title_claim"),
-        ("subtitle_target", "subtitle"),
-        ("eyebrow_target", "meeting_subject"),
-    ):
+    rewrite_specs = [("title_target", "title_claim")]
+    if str(frame.get("role", "")).strip().casefold() == "cover":
+        rewrite_specs.extend(
+            [
+                ("subtitle_target", "subtitle"),
+                ("eyebrow_target", "meeting_subject"),
+            ]
+        )
+    for key, content_ref in rewrite_specs:
         target = frame.get(key)
         if not isinstance(target, dict) or not target.get("id"):
             continue
@@ -1411,6 +3397,13 @@ def default_edit_targets(frame: dict[str, Any]) -> list[dict[str, Any]]:
     return targets
 
 
+def slide_has_content_ref(entry: dict[str, Any], content_ref: str) -> bool:
+    content = entry.get("content")
+    return (
+        isinstance(content, dict) and content_ref in content
+    ) or content_ref in entry
+
+
 def declared_advanced_edit_actions(config: dict[str, Any], project: Path) -> set[str]:
     contract = config.get("build", {}).get("advanced_edit_contract")
     if contract in (None, False):
@@ -1434,9 +3427,22 @@ def declared_advanced_edit_actions(config: dict[str, Any], project: Path) -> set
     return actions
 
 
-def validate_edit_targets(targets: Any, slide_number: int, advanced_actions: set[str]) -> list[dict[str, Any]]:
+def validate_edit_targets(
+    targets: Any,
+    slide_number: int,
+    advanced_actions: set[str],
+    frame: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     if not isinstance(targets, list):
         raise LabDeckError(f"slide {slide_number} template_frame.edit_targets must be an array")
+    approved_rewrites = {
+        (
+            str(target.get("sourceElementId", "")).strip(),
+            str(target.get("sourceName", "")).strip(),
+        ): str(target.get("contentRef", "")).strip()
+        for target in default_edit_targets(frame or {})
+        if target.get("action") == "rewrite"
+    }
     validated: list[dict[str, Any]] = []
     for index, target in enumerate(targets):
         if not isinstance(target, dict):
@@ -1444,7 +3450,7 @@ def validate_edit_targets(targets: Any, slide_number: int, advanced_actions: set
         action = str(target.get("action", "")).strip()
         if not action:
             raise LabDeckError(f"slide {slide_number} edit target {index + 1} is missing action")
-        if action in advanced_actions:
+        if action in advanced_actions and action not in {"rewrite", "add"}:
             validated.append(target)
             continue
         if action not in {"rewrite", "add"}:
@@ -1458,6 +3464,27 @@ def validate_edit_targets(targets: Any, slide_number: int, advanced_actions: set
                     raise LabDeckError(
                         f"slide {slide_number} rewrite target {index + 1} requires nonempty {field}; "
                         "the scaffold resolves inherited objects by sourceName"
+                    )
+            content_ref = str(target.get("contentRef", "")).strip()
+            if content_ref not in {"title_claim", "subtitle", "meeting_subject"}:
+                raise LabDeckError(
+                    f"slide {slide_number} rewrite target {index + 1} uses unsupported contentRef "
+                    f"{content_ref!r}; visible rewrites are pinned to title_claim and compact cover metadata"
+                )
+            if frame is not None:
+                binding = (
+                    str(target.get("sourceElementId", "")).strip(),
+                    str(target.get("sourceName", "")).strip(),
+                )
+                expected_ref = approved_rewrites.get(binding)
+                if expected_ref is None:
+                    raise LabDeckError(
+                        f"slide {slide_number} rewrite target {index + 1} is not an approved inherited text target"
+                    )
+                if content_ref != expected_ref:
+                    raise LabDeckError(
+                        f"slide {slide_number} rewrite target {index + 1} must use contentRef "
+                        f"{expected_ref!r} for the selected inherited target"
                     )
         else:
             zone = target.get("zone")
@@ -1558,7 +3585,7 @@ def build_template_frame_map(
         targets = frame_spec.get("edit_targets")
         if targets is None:
             targets = default_edit_targets(frame)
-        targets = validate_edit_targets(targets, expected, actions)
+        targets = validate_edit_targets(targets, expected, actions, frame)
         used_source_slides.add(frame_source)
         output_slides.append(
             {
@@ -1794,6 +3821,9 @@ def command_init(args: argparse.Namespace) -> int:
             "allowed_fonts": ["Arial", "Courier New"],
             "minimum_body_pt": 16,
             "template_fonts": [],
+            "active_palette": dict(DEFAULT_ACTIVE_PALETTE),
+            "active_palette_sha256": active_palette_sha256(DEFAULT_ACTIVE_PALETTE),
+            "language_exceptions": [],
             "technical_shapes_editable": True,
             "decorative_programmatic_shapes": False,
             "preserve_editable_lab_lockup": True,
@@ -1805,6 +3835,7 @@ def command_init(args: argparse.Namespace) -> int:
             "require_template_fidelity": True,
             "render_width": 1600,
             "render_height": 900,
+            "content_contract": dict(DEFAULT_CONTENT_CONTRACT),
             "visual_contract": dict(DEFAULT_VISUAL_CONTRACT),
             "user_acceptance": {
                 "required": True,
@@ -1838,6 +3869,11 @@ def command_init(args: argparse.Namespace) -> int:
             "visual_thesis": "",
             "system_declaration": "",
             "palette": {},
+            "source_palette": {},
+            "palette_policy": {
+                "mode": "closed-semantic",
+                "rule": "Use only named active-palette tokens for generated body objects.",
+            },
             "typefaces": [],
             "signature": "",
             "anti_patterns": [],
@@ -1855,7 +3891,7 @@ def command_init(args: argparse.Namespace) -> int:
     ):
         write_text(
             project / "reports" / pass_name,
-            f"# {title}\n\nVERDICT: PENDING\nConfidence: Pending\nEvidence: PENDING\nDeck SHA256: PENDING\nRender manifest SHA256: PENDING\nSource manifest SHA256: PENDING\nUnresolved Critical: PENDING\nBlocking findings: PENDING\n\n## Checks\n\n- [ ] Template fidelity and inherited chrome: PENDING\n- [ ] Composition, hierarchy, and 3-5 second takeaway: PENDING\n- [ ] Typography, palette, CJK wrapping, and anti-slop: PENDING\n- [ ] Content truth, provenance, and editability: PENDING\n\n## Findings\n\n| Slide | Finding | Severity | Fix | Status |\n|---|---|---|---|---|\n",
+            f"# {title}\n\nVERDICT: PENDING\nConfidence: Pending\nEvidence: PENDING\nDeck SHA256: PENDING\nRender manifest SHA256: PENDING\nSource manifest SHA256: PENDING\nUnresolved Critical: PENDING\nBlocking findings: PENDING\n\n## Checks\n\n- [ ] Template fidelity and inherited chrome: PENDING\n- [ ] Composition, hierarchy, and figure-first reading: PENDING\n- [ ] English copy, keyword titles, closed palette, and no filler: PENDING\n- [ ] Content truth, provenance, and editability: PENDING\n\n## Findings\n\n| Slide | Finding | Severity | Fix | Status |\n|---|---|---|---|---|\n",
         )
     write_text(
         project / "reports/design-debt.md",
@@ -1918,6 +3954,12 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
         "errors": [],
         "warnings": [],
     }
+    content_contract_report: dict[str, Any] = {
+        "status": "not-run",
+        "checks": [],
+        "errors": [],
+        "warnings": [],
+    }
     title_fit_preflight: dict[str, Any] = {
         "status": "not-run",
         "checks": [],
@@ -1940,6 +3982,19 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
     if config.get("schema_version") == 2 and template_mode(config):
         errors.extend(native_rebuild_contract_errors(config, config_path, project))
 
+    trusted_active_palette: dict[str, str] | None = None
+    if config.get("schema_version") == 2:
+        if template_mode(config):
+            try:
+                palette_template = template_paths(config, project)["pptx"]
+                if palette_template.exists():
+                    trusted_active_palette = active_palette_for_template(palette_template)
+            except (LabDeckError, OSError, ValueError, zipfile.BadZipFile, ET.ParseError) as error:
+                errors.append(f"cannot derive active palette from the template: {error}")
+        else:
+            trusted_active_palette = dict(DEFAULT_ACTIVE_PALETTE)
+        errors.extend(active_palette_contract_errors(config, trusted_active_palette))
+
     design_path = project / "content/design-system.json"
     design: dict[str, Any] = {}
     if config.get("schema_version") == 2:
@@ -1953,6 +4008,12 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
                     errors.append(f"design-system {field} is incomplete")
             if design.get("template_status") != "approved":
                 errors.append("design-system template_status must be approved before authoring")
+            active_palette = configured_active_palette(config)
+            if design.get("palette") != active_palette:
+                errors.append("design-system palette must match style.active_palette exactly")
+            palette_policy = design.get("palette_policy")
+            if not isinstance(palette_policy, dict) or palette_policy.get("mode") != "closed-semantic":
+                errors.append("design-system palette_policy.mode must be closed-semantic")
 
     for source_item in config.get("sources", []):
         path_value = source_item.get("path")
@@ -2036,6 +4097,13 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
     if not inherited_notes_deck or not inherited_notes_deck.exists():
         inherited_notes_deck = reference
     errors.extend(validate_notes_contract(config, project, len(slides), inherited_notes_deck))
+    notes_data: Any = []
+    notes_path = resolve_path(config.get("notes", {}).get("path"), project)
+    if notes_path and notes_path.exists():
+        notes_data = read_json(notes_path)
+    content_contract_report = content_contract_audit(config, plan, notes_data)
+    errors.extend(content_contract_report["errors"])
+    warnings.extend(content_contract_report["warnings"])
 
     claims_path = project / "content/claims.json"
     if not claims_path.exists():
@@ -2112,10 +4180,33 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
                     errors.append("template frame map is stale relative to slide-plan.json; rerun prepare-template")
                 if len(actual_map.get("outputSlides", [])) != len(slides):
                     errors.append("template frame map and slide plan have different slide counts")
+                plan_by_slide = {
+                    entry.get("slide"): entry
+                    for entry in slides
+                    if isinstance(entry, dict) and isinstance(entry.get("slide"), int)
+                }
+                for mapping in actual_map.get("outputSlides", []):
+                    if not isinstance(mapping, dict):
+                        continue
+                    slide_number = mapping.get("outputSlide")
+                    plan_entry = plan_by_slide.get(slide_number, {})
+                    for target in mapping.get("editTargets", []):
+                        if not isinstance(target, dict) or target.get("action") != "rewrite":
+                            continue
+                        content_ref = str(target.get("contentRef", "")).strip()
+                        if content_ref and not slide_has_content_ref(plan_entry, content_ref):
+                            errors.append(
+                                f"slide {slide_number} is missing mapped contentRef {content_ref!r}"
+                            )
                 title_fit_preflight = preflight_title_claim_fit(plan, actual_map, paths["starter_layout"])
                 errors.extend(title_fit_preflight["errors"])
                 warnings.extend(title_fit_preflight["warnings"])
-                visual_contract_report = visual_contract_audit(config, plan, actual_map)
+                visual_contract_report = visual_contract_audit(
+                    config,
+                    plan,
+                    actual_map,
+                    trusted_palette=trusted_active_palette,
+                )
                 errors.extend(visual_contract_report["errors"])
                 warnings.extend(visual_contract_report["warnings"])
             if paths["starter"].exists():
@@ -2153,6 +4244,7 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
         "errors": errors,
         "warnings": warnings,
         "title_fit_preflight": title_fit_preflight,
+        "content_contract": content_contract_report,
         "visual_contract": visual_contract_report,
     }
     return report
@@ -2162,6 +4254,8 @@ def write_audit_report(project: Path, report: dict[str, Any]) -> None:
     write_json(project / "reports/audit-report.json", report)
     if isinstance(report.get("title_fit_preflight"), dict):
         write_json(project / "reports/title-fit-preflight.json", report["title_fit_preflight"])
+    if isinstance(report.get("content_contract"), dict):
+        write_json(project / "reports/content-contract.json", report["content_contract"])
     if isinstance(report.get("visual_contract"), dict):
         write_json(project / "reports/visual-contract.json", report["visual_contract"])
     lines = [
@@ -2623,6 +4717,8 @@ def run_template_fidelity_check(config: dict[str, Any], project: Path, final: Pa
                 str(paths["frame_map"]),
                 "--plan",
                 str(project / "content/slide-plan.json"),
+                "--config",
+                str(project / "labdeck.json"),
                 "--starter-layout-dir",
                 str(paths["starter_layout"]),
                 "--final-layout-dir",
@@ -2685,6 +4781,15 @@ def command_qa(args: argparse.Namespace) -> int:
     package = pptx_package_stats(final)
     if not package["zip_ok"]:
         errors.append(f"PPTX ZIP corruption at {package['corrupt_member']}")
+    final_plan_path = project / "content/slide-plan.json"
+    final_plan = read_json(final_plan_path) if final_plan_path.exists() else {"slides": []}
+    errors.extend(
+        final_visible_copy_errors(
+            config,
+            package,
+            planned_language_exceptions(final_plan),
+        )
+    )
     expected_slides = config.get("deck", {}).get("expected_slides")
     if expected_slides is not None and package["slide_count"] != expected_slides:
         errors.append(f"expected {expected_slides} slides, found {package['slide_count']}")
@@ -2827,9 +4932,14 @@ def command_qa(args: argparse.Namespace) -> int:
         "source_manifest_sha256": source_manifest_sha,
         "render_dir": str(render_dir),
         "montage": str(montage),
-        "package": {key: value for key, value in package.items() if key != "visible_text"},
+        "package": {
+            key: value
+            for key, value in package.items()
+            if key not in {"visible_text", "text_runs"}
+        },
         "notes": inspection,
         "template_fidelity": fidelity,
+        "content_contract": audit.get("content_contract", {}),
         "compatibility": compatibility,
         "user_acceptance": acceptance_report,
         "slides_test": {

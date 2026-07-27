@@ -29,8 +29,37 @@ def slide(number: int, family: str = "process-flow", *, basis: object = None, un
         "slide": number,
         "template_frame": {"role": "content"},
         "visual_contract": spec,
+        "evidence_refs": [f"claim-{number}"],
         "native_elements": [
-            {"type": "shape", "geometry": "rect", "position": {"x": 10, "y": 10, "w": 50, "h": 50}}
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "diagram-node",
+                "position": {"x": 10, "y": 10, "w": 25, "h": 80},
+            },
+            {
+                "type": "line",
+                "visual_role": "connector",
+                "position": {"x": 35, "y": 45, "w": 30, "h": 10},
+            },
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "diagram-node",
+                "position": {"x": 65, "y": 10, "w": 25, "h": 80},
+            },
+            {
+                "type": "text",
+                "text_role": "figure-label",
+                "text": "Input",
+                "position": {"x": 12, "y": 40, "w": 20, "h": 10},
+            },
+            {
+                "type": "text",
+                "text_role": "figure-label",
+                "text": "Output",
+                "position": {"x": 68, "y": 40, "w": 20, "h": 10},
+            },
         ],
     }
 
@@ -51,7 +80,16 @@ def frame_map(count: int) -> dict:
 
 class VisualContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.config = {"qa": {"visual_contract": dict(lab_slides.DEFAULT_VISUAL_CONTRACT)}}
+        self.config = {
+            "schema_version": 2,
+            "style": {
+                "active_palette": dict(lab_slides.DEFAULT_ACTIVE_PALETTE),
+                "active_palette_sha256": lab_slides.active_palette_sha256(
+                    lab_slides.DEFAULT_ACTIVE_PALETTE
+                ),
+            },
+            "qa": {"visual_contract": dict(lab_slides.DEFAULT_VISUAL_CONTRACT)},
+        }
 
     def test_content_anchor_and_coverage_pass(self) -> None:
         report = lab_slides.visual_contract_audit(
@@ -59,6 +97,7 @@ class VisualContractTests(unittest.TestCase):
         )
         self.assertEqual(report["status"], "pass", report)
         self.assertGreaterEqual(report["checks"][0]["body_coverage_ratio"], 0.16)
+        self.assertGreaterEqual(report["checks"][0]["figure_area_ratio"], 0.18)
 
     def test_missing_anchor_and_basis_fail(self) -> None:
         entry = slide(1, basis=[])
@@ -81,7 +120,7 @@ class VisualContractTests(unittest.TestCase):
         self.assertTrue(any("repeats composition family" in error for error in report["errors"]))
         self.assertTrue(any("composition signature" in error for error in report["errors"]))
 
-    def test_sparse_slide_requires_explicit_exception(self) -> None:
+    def test_body_slide_cannot_self_authorize_figure_exception(self) -> None:
         sparse = slide(1)
         sparse["native_elements"] = []
         report = lab_slides.visual_contract_audit(self.config, {"slides": [sparse]}, frame_map(1))
@@ -89,8 +128,417 @@ class VisualContractTests(unittest.TestCase):
         self.assertTrue(any("underfill_rationale" in error for error in report["errors"]))
         sparse["visual_contract"]["allow_underfill"] = True
         sparse["visual_contract"]["underfill_rationale"] = "Intentional sparse transition with one evidence anchor."
+        sparse["visual_contract"]["allow_figure_exception"] = True
+        sparse["visual_contract"]["figure_exception_rationale"] = "No body figure is appropriate for this transition."
         report = lab_slides.visual_contract_audit(self.config, {"slides": [sparse]}, frame_map(1))
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(any("may not self-authorize underfill" in error for error in report["errors"]))
+        self.assertTrue(any("may not self-authorize a figure exception" in error for error in report["errors"]))
+
+    def test_text_only_area_does_not_satisfy_primary_figure(self) -> None:
+        entry = slide(1)
+        entry["native_elements"] = [
+            {
+                "type": "text",
+                "text_role": "callout",
+                "text": "Large text is not a figure",
+                "position": {"x": 5, "y": 5, "w": 90, "h": 90},
+            }
+        ]
+        report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("primary-figure span" in error for error in report["errors"]))
+
+    def test_raw_hex_and_unknown_colors_are_rejected(self) -> None:
+        entry = slide(1)
+        entry["native_elements"][0]["fill"] = "#0353A4"
+        report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("raw hex" in error for error in report["errors"]))
+        entry["native_elements"][0]["fill"] = "orange"
+        report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
+        self.assertTrue(any("active palette tokens" in error for error in report["errors"]))
+
+    def test_palette_tokens_and_declared_focus_pass(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["focus_target"] = "changed lane"
+        entry["native_elements"][0]["fill"] = "soft"
+        entry["native_elements"][0]["line"] = {"fill": "focus", "width": 2}
+        report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
         self.assertEqual(report["status"], "pass", report)
+
+    def test_palette_values_and_token_set_are_template_pinned(self) -> None:
+        entry = slide(1)
+        changed = json.loads(json.dumps(self.config))
+        changed["style"]["active_palette"]["focus"] = "#FF00FF"
+        changed["style"]["active_palette"]["rogue"] = "#FF0000"
+        changed["style"]["active_palette_sha256"] = lab_slides.active_palette_sha256(
+            changed["style"]["active_palette"]
+        )
+        report = lab_slides.visual_contract_audit(
+            changed,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("exactly" in error for error in report["errors"]))
+        self.assertTrue(any("derived from the inspected template" in error for error in report["errors"]))
+
+    def test_diagram_requires_nodes_and_connector(self) -> None:
+        entry = slide(1)
+        entry["native_elements"] = [entry["native_elements"][0]]
+        report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("diagram-node" in error for error in report["errors"]))
+        self.assertTrue(any("connector" in error for error in report["errors"]))
+
+    def test_connector_role_requires_line_path_or_arrow_geometry(self) -> None:
+        entry = slide(1)
+        entry["native_elements"][1] = {
+            "type": "shape",
+            "geometry": "rect",
+            "visual_role": "connector",
+            "position": {"x": 35, "y": 45, "w": 30, "h": 10},
+        }
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(
+            any("line/path/arrow connector" in error for error in report["errors"]),
+            report,
+        )
+
+    def test_full_zone_rectangle_cannot_impersonate_plot(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "plot"
+        entry["native_elements"] = [
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "plot",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            }
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("data-backed chart" in error for error in report["errors"]))
+
+    def test_scalar_string_cannot_impersonate_chart_data(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "chart"
+        entry["native_elements"] = [
+            {
+                "type": "chart",
+                "visual_role": "plot",
+                "series": "x",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            }
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("data-backed chart" in error for error in report["errors"]))
+
+    def test_string_labels_cannot_impersonate_chart_data(self) -> None:
+        for series in (
+            ["x", "y"],
+            [{"name": "x", "label": "First"}, {"name": "y", "label": "Second"}],
+        ):
+            entry = slide(1)
+            entry["visual_contract"]["anchor_type"] = "chart"
+            entry["native_elements"] = [
+                {
+                    "type": "chart",
+                    "visual_role": "plot",
+                    "series": series,
+                    "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                }
+            ]
+            report = lab_slides.visual_contract_audit(
+                self.config,
+                {"slides": [entry]},
+                frame_map(1),
+            )
+            self.assertEqual(report["status"], "fail", report)
+            self.assertTrue(
+                any("data-backed chart" in error for error in report["errors"]),
+                report,
+            )
+
+    def test_numeric_chart_data_remains_valid(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "chart"
+        entry["native_elements"] = [
+            {
+                "type": "chart",
+                "visual_role": "plot",
+                "series": [1, 2],
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            }
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "pass", report)
+
+    def test_empty_code_box_cannot_impersonate_code_figure(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "code"
+        entry["native_elements"] = [
+            {
+                "type": "code",
+                "visual_role": "code",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            }
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(
+            any("nonempty editable code" in error for error in report["errors"]),
+            report,
+        )
+
+    def test_primitive_plot_requires_axes_and_data_marks(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "plot"
+        entry["native_elements"] = [
+            {
+                "type": "line",
+                "visual_role": "axis",
+                "position": {"x": 10, "y": 10, "w": 2, "h": 80},
+            },
+            {
+                "type": "line",
+                "visual_role": "axis",
+                "position": {"x": 10, "y": 88, "w": 80, "h": 2},
+            },
+            {
+                "type": "shape",
+                "visual_role": "data-mark",
+                "value": 4,
+                "position": {"x": 20, "y": 60, "w": 25, "h": 28},
+            },
+            {
+                "type": "shape",
+                "visual_role": "data-mark",
+                "value": 9,
+                "position": {"x": 55, "y": 25, "w": 25, "h": 63},
+            },
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "pass", report)
+
+    def test_boundary_and_tiny_unbound_marks_cannot_fake_figure_dominance(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "plot"
+        entry["native_elements"] = [
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "boundary",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            },
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "axis",
+                "position": {"x": 1, "y": 1, "w": 1, "h": 1},
+            },
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "axis",
+                "position": {"x": 2, "y": 2, "w": 1, "h": 1},
+            },
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "data-mark",
+                "position": {"x": 3, "y": 3, "w": 1, "h": 1},
+            },
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "data-mark",
+                "position": {"x": 4, "y": 4, "w": 1, "h": 1},
+            },
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(
+            any("data-backed chart" in error for error in report["errors"]),
+            report,
+        )
+        self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
+        self.assertLess(report["checks"][0]["figure_span_ratio"], 0.01)
+
+    def test_unrelated_full_zone_role_cannot_inflate_plot_metrics(self) -> None:
+        for unrelated in (
+            {
+                "type": "shape",
+                "geometry": "rect",
+                "visual_role": "diagram-node",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            },
+            {
+                "type": "code",
+                "visual_role": "code",
+                "code": "x = 1",
+                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+            },
+        ):
+            entry = slide(1)
+            entry["visual_contract"]["anchor_type"] = "plot"
+            entry["native_elements"] = [
+                unrelated,
+                {
+                    "type": "line",
+                    "visual_role": "axis",
+                    "position": {"x": 10, "y": 10, "w": 1, "h": 10},
+                },
+                {
+                    "type": "line",
+                    "visual_role": "axis",
+                    "position": {"x": 10, "y": 19, "w": 10, "h": 1},
+                },
+                {
+                    "type": "shape",
+                    "visual_role": "data-mark",
+                    "value": 1,
+                    "position": {"x": 12, "y": 17, "w": 1, "h": 1},
+                },
+                {
+                    "type": "shape",
+                    "visual_role": "data-mark",
+                    "value": 2,
+                    "position": {"x": 17, "y": 13, "w": 1, "h": 1},
+                },
+            ]
+            report = lab_slides.visual_contract_audit(
+                self.config,
+                {"slides": [entry]},
+                frame_map(1),
+            )
+            self.assertEqual(report["status"], "fail", report)
+            self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
+            self.assertLess(report["checks"][0]["figure_span_ratio"], 0.05)
+            self.assertNotIn(
+                unrelated["visual_role"],
+                report["checks"][0]["figure_roles"],
+            )
+
+    def test_rewrite_only_body_slide_cannot_bypass_figure_gate(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "plot"
+        entry["native_elements"] = []
+        rewrite_only = {
+            "outputSlides": [
+                {
+                    "outputSlide": 1,
+                    "editTargets": [{"action": "rewrite", "contentRef": "title_claim"}],
+                }
+            ]
+        }
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            rewrite_only,
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("no bounded figure zone" in error for error in report["errors"]))
+
+    def test_tiny_marks_and_large_text_cannot_fake_dominant_figure(self) -> None:
+        entry = slide(1)
+        entry["visual_contract"]["anchor_type"] = "plot"
+        entry["native_elements"] = [
+            {
+                "type": "text",
+                "text_role": "annotation",
+                "text": "Large prose rectangle",
+                "position": {"x": 10, "y": 10, "w": 80, "h": 80},
+            },
+            {
+                "type": "shape",
+                "visual_role": "data-mark",
+                "position": {"x": 1, "y": 1, "w": 1, "h": 1},
+            },
+            {
+                "type": "shape",
+                "visual_role": "data-mark",
+                "position": {"x": 98, "y": 98, "w": 1, "h": 1},
+            },
+        ]
+        report = lab_slides.visual_contract_audit(
+            self.config,
+            {"slides": [entry]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("primary-figure area" in error for error in report["errors"]))
+        self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
+
+    def test_visual_contract_cannot_be_removed_or_disabled(self) -> None:
+        missing = {"schema_version": 2, "qa": {}}
+        report = lab_slides.visual_contract_audit(
+            missing,
+            {"slides": [slide(1)]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+
+        disabled = {
+            "schema_version": 2,
+            "qa": {
+                "visual_contract": {
+                    "enabled": False,
+                    "disabled_reason": "self-authorized bypass",
+                }
+            },
+        }
+        report = lab_slides.visual_contract_audit(
+            disabled,
+            {"slides": [slide(1)]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("may not be disabled" in error for error in report["errors"]))
+
+    def test_visual_contract_settings_are_pinned(self) -> None:
+        weakened = json.loads(json.dumps(self.config))
+        weakened["qa"]["visual_contract"]["require_primary_figure"] = False
+        weakened["qa"]["visual_contract"]["min_figure_span_ratio"] = 0
+        weakened["qa"]["visual_contract"]["allowed_anchor_types"].append("rectangle")
+        report = lab_slides.visual_contract_audit(
+            weakened,
+            {"slides": [slide(1)]},
+            frame_map(1),
+        )
+        self.assertEqual(report["status"], "fail")
+        self.assertTrue(any("pinned by the skill" in error for error in report["errors"]))
 
     def test_user_acceptance_is_sha_pinned(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:

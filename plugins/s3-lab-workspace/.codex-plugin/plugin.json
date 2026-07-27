@@ -1,7 +1,7 @@
 {
   "name": "s3-lab-workspace",
-  "version": "0.3.0",
-  "description": "Search the shared S3 research memory and build editable lab-meeting slides from one install.",
+  "version": "0.4.0",
+  "description": "Search S3 research memory and build restrained, English, figure-first lab-meeting slides.",
   "author": {
     "name": "S3 Lab",
     "url": "https://s3wiki.yonsei.ac.kr/"
@@ -20,20 +20,21 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "S3 Lab Workspace",
-    "shortDescription": "Research memory and lab-meeting slides in one install",
-    "longDescription": "Search and extend the lab's shared S3 Research Memory, then turn research progress into editable PowerPoint decks with the lab's template and visual-quality checks. The plugin connects directly to the central HTTPS MCP service and does not depend on a personal app ID.",
+    "shortDescription": "Research memory and figure-first lab slides",
+    "longDescription": "Search and extend the lab's shared S3 Research Memory, then turn research progress into restrained, editable PowerPoint decks with English keyword titles, a closed lab palette, and dominant research figures. The plugin connects directly to the central HTTPS MCP service and does not depend on a personal app ID.",
     "developerName": "S3 Lab",
     "category": "Productivity",
     "capabilities": [
       "Research memory",
       "Evidence retrieval",
       "Editable PowerPoint",
+      "Figure-first lab decks",
       "Policy-controlled writes"
     ],
     "websiteURL": "https://s3wiki.yonsei.ac.kr/",
     "defaultPrompt": [
-      "Find relevant S3 research lessons, then outline this week's lab-meeting deck.",
-      "Build an editable lab-meeting deck from this research material.",
+      "Find relevant S3 research lessons, then outline this week's English lab-meeting deck.",
+      "Build a restrained editable deck with keyword titles and one dominant figure per body slide.",
       "Save this evidence-backed lesson to S3 Research Memory."
     ],
     "brandColor": "#123B5D",

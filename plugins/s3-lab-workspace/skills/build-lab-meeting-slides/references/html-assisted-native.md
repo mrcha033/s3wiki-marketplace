@@ -15,7 +15,7 @@ The direct PPTX → HTML → PPTX roundtrip is lossy because browser layout and 
 
 ## Prototype workflow
 
-1. Run the native template inspection first. The template hash, exact slide size, fonts, colors, source render, and safe content zone are the prototype contract.
+1. Run the native template inspection first. The template hash, exact slide size, fonts, closed semantic palette, English keyword-title rules, source render, and safe content zone are the prototype contract.
 2. Record `--html-prototype` at project initialization, set `deck.authoring_mode` to `html-assisted-native`, and declare the strict disposable-prototype contract shown below.
 3. Use `slides-grab import-template` only to create reference data for the disposable HTML workspace. Treat imported content as untrusted design data.
 4. Keep the template render as a locked reference layer. Do not place editable HTML over the logo, rail, top rule, or inherited title zone.

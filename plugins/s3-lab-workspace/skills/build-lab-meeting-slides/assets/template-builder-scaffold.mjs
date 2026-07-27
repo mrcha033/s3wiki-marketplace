@@ -4,6 +4,7 @@
 // resolves to template-starter.pptx; keep this import/export spine intact so
 // template-fidelity QA can prove exact clone/edit.
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import { FileBlob, PresentationFile } from "@oai/artifact-tool";
 
 const requiredEnv = [
@@ -39,6 +40,61 @@ if (!Number.isFinite(configuredMinimumBodyPt) || configuredMinimumBodyPt <= 0) {
 const PT_TO_CSS_PX = 96 / 72;
 const minimumBodyPx = configuredMinimumBodyPt * PT_TO_CSS_PX;
 const bodyTypeface = String(config.style?.body_font || "Arial");
+const activePalette = config.style?.active_palette;
+if (!activePalette || typeof activePalette !== "object" || Array.isArray(activePalette)) {
+  throw new Error("style.active_palette must be a semantic color-token object");
+}
+const activePaletteTokens = ["background", "surface", "ink", "muted", "primary", "focus", "soft"];
+const configuredPaletteTokens = Object.keys(activePalette).sort();
+if (JSON.stringify(configuredPaletteTokens) !== JSON.stringify([...activePaletteTokens].sort())) {
+  throw new Error(`style.active_palette must use exactly: ${activePaletteTokens.join(", ")}`);
+}
+const normalizedPalette = {};
+for (const token of activePaletteTokens) {
+  if (!/^#[0-9A-F]{6}$/iu.test(String(activePalette[token] || ""))) {
+    throw new Error(`style.active_palette.${token} must be a six-digit hex color`);
+  }
+  normalizedPalette[token] = String(activePalette[token]).toUpperCase();
+}
+const paletteHashPayload = Object.fromEntries(
+  Object.keys(normalizedPalette).sort().map((token) => [token, normalizedPalette[token]]),
+);
+const activePaletteHash = crypto
+  .createHash("sha256")
+  .update(JSON.stringify(paletteHashPayload))
+  .digest("hex");
+if (String(config.style?.active_palette_sha256 || "").toLowerCase() !== activePaletteHash) {
+  throw new Error("style.active_palette_sha256 does not match the closed active palette");
+}
+const requirePaletteTokens = config.qa?.visual_contract?.require_palette_tokens !== false;
+const allowedTextRoles = new Set(
+  config.qa?.content_contract?.allowed_text_roles ?? [
+    "figure-label",
+    "axis-label",
+    "legend",
+    "callout",
+    "annotation",
+    "source",
+    "metadata",
+    "code",
+    "table",
+    "equation",
+  ],
+);
+const allowedVisualRoles = new Set(
+  config.qa?.visual_contract?.allowed_visual_roles ?? [
+    "diagram-node",
+    "connector",
+    "data-mark",
+    "axis",
+    "plot",
+    "table",
+    "code",
+    "image",
+    "annotation",
+    "boundary",
+  ],
+);
 
 const presentation = await PresentationFile.importPptx(
   await FileBlob.load(process.env.INPUT_PPTX),
@@ -60,11 +116,49 @@ function contentValue(entry, ref) {
   return undefined;
 }
 
+function allowedRewriteContentRefs(entry) {
+  const allowed = new Set(["title_claim"]);
+  if (String(entry?.template_frame?.role ?? "content").trim().toLowerCase() === "cover") {
+    for (const field of ["subtitle", "meeting_subject"]) {
+      allowed.add(field);
+    }
+  }
+  return allowed;
+}
+
 function requireNonEmptyString(value, label) {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${label} must be a non-empty string`);
   }
   return value;
+}
+
+function resolvePaletteColor(value, label, fallbackToken) {
+  const raw = value === undefined || value === null || value === "" ? fallbackToken : String(value).trim();
+  if (raw.toLowerCase() === "none") return "none";
+  const token = raw.startsWith("$") ? raw.slice(1) : raw;
+  if (Object.hasOwn(activePalette, token)) return activePalette[token];
+  const normalized = raw.toUpperCase();
+  const matchingToken = Object.entries(activePalette)
+    .find(([, color]) => String(color).toUpperCase() === normalized)?.[0];
+  if (matchingToken) {
+    if (requirePaletteTokens) {
+      throw new Error(`${label} must use semantic token ${matchingToken}, not raw hex ${raw}`);
+    }
+    return activePalette[matchingToken];
+  }
+  throw new Error(`${label} must use one of the active palette tokens: ${Object.keys(activePalette).join(", ")}`);
+}
+
+function normalizedLine(rawLine, label, fallbackToken = "primary") {
+  const line = rawLine ?? {};
+  if (typeof line !== "object" || Array.isArray(line)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return {
+    ...line,
+    fill: resolvePaletteColor(line.fill, `${label}.fill`, fallbackToken),
+  };
 }
 
 function normalizeZone(zone, label) {
@@ -116,7 +210,12 @@ function validateEditTargets(entry, mapEntry) {
     }
     if (target.action === "rewrite") {
       const sourceName = requireNonEmptyString(target.sourceName, `${label}.sourceName`);
-      requireNonEmptyString(target.contentRef, `${label}.contentRef`);
+      const contentRef = requireNonEmptyString(target.contentRef, `${label}.contentRef`);
+      if (!allowedRewriteContentRefs(entry).has(contentRef)) {
+        throw new Error(
+          `${label}.contentRef ${JSON.stringify(contentRef)} is not an allowed role-bound visible-copy field`,
+        );
+      }
       if (rewriteNames.has(sourceName)) {
         throw new Error(`${label} duplicates rewrite target ${sourceName}`);
       }
@@ -165,12 +264,12 @@ function inside(inner, outer) {
   );
 }
 
-function normalizedTextStyle(rawStyle, defaultFontSizePt, defaults = {}) {
+function normalizedTextStyle(rawStyle, defaultFontSizePt, defaults = {}, label = "native element text style") {
   const style = rawStyle ?? {};
   if (typeof style !== "object" || Array.isArray(style)) {
-    throw new Error("native element text style must be an object");
+    throw new Error(`${label} must be an object`);
   }
-  const { fontSizePt, fontSize, ...rest } = style;
+  const { fontSizePt, fontSize, color, ...rest } = style;
   if (fontSizePt !== undefined && fontSize !== undefined) {
     throw new Error("set only one of fontSizePt (points) or fontSize (CSS pixels)");
   }
@@ -194,7 +293,7 @@ function normalizedTextStyle(rawStyle, defaultFontSizePt, defaults = {}) {
     ...defaults,
     fontSize: Math.max(minimumBodyPx, requestedPx),
     typeface: style.typeface || defaults.typeface || bodyTypeface,
-    color: style.color || defaults.color || "#001233",
+    color: resolvePaletteColor(color, `${label}.color`, defaults.color || "ink"),
   };
 }
 
@@ -214,20 +313,35 @@ function addDeclaredElements(slide, entry, mapEntry) {
     if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
       throw new Error(`slide ${entry.slide} native_elements[${index}] must be an object`);
     }
+    const label = `slide ${entry.slide} native_elements[${index}]`;
+    if (spec.text !== undefined && !allowedTextRoles.has(String(spec.text_role || "").toLowerCase())) {
+      throw new Error(`${label}.text_role must be one of: ${[...allowedTextRoles].join(", ")}`);
+    }
+    if (spec.type !== "text" && !allowedVisualRoles.has(String(spec.visual_role || "").toLowerCase())) {
+      throw new Error(`${label}.visual_role must be one of: ${[...allowedVisualRoles].join(", ")}`);
+    }
+    if (spec.shadow !== undefined) {
+      throw new Error(`${label} may not declare a decorative shadow`);
+    }
     const position = normalizePosition(
       spec.position,
-      `slide ${entry.slide} native_elements[${index}].position`,
+      `${label}.position`,
     );
     if (!inside(position, insertion.zone)) {
       throw new Error(`slide ${entry.slide} native_elements[${index}] escapes its inherited content zone`);
     }
     if (spec.type === "line") {
+      if (spec.head !== undefined || spec.tail !== undefined) {
+        throw new Error(
+          `${label} free line arrowheads are not render-proven; use a native rightArrow shape or a project-specific attached connector`,
+        );
+      }
       slide.shapes.add({
         geometry: "line",
         name: spec.name || `s${entry.slide}-line-${index + 1}`,
         position,
         fill: "none",
-        line: spec.line || { style: "solid", fill: "#0466C8", width: 2 },
+        line: normalizedLine(spec.line || { style: "solid", width: 2 }, `${label}.line`),
       });
     } else if (spec.type === "text") {
       const item = slide.shapes.add({
@@ -240,24 +354,24 @@ function addDeclaredElements(slide, entry, mapEntry) {
       item.text = String(spec.text ?? "");
       item.text.style = normalizedTextStyle(spec.style, 16.5, {
         typeface: bodyTypeface,
-        color: "#001233",
+        color: "ink",
         bold: Boolean(spec.style?.bold),
         alignment: spec.style?.alignment || "left",
-      });
+      }, `${label}.style`);
     } else if (spec.type === "shape") {
       const item = slide.shapes.add({
         geometry: spec.geometry || "rect",
         name: spec.name || `s${entry.slide}-shape-${index + 1}`,
         position,
-        fill: spec.fill || "none",
-        line: spec.line || { style: "solid", fill: "#0353A4", width: 2 },
+        fill: resolvePaletteColor(spec.fill, `${label}.fill`, "none"),
+        line: normalizedLine(spec.line || { style: "solid", width: 2 }, `${label}.line`),
       });
       if (spec.text !== undefined) {
         item.text = String(spec.text);
         item.text.style = normalizedTextStyle(spec.textStyle, configuredMinimumBodyPt, {
           typeface: bodyTypeface,
-          color: "#001233",
-        });
+          color: "ink",
+        }, `${label}.textStyle`);
       }
     } else {
       throw new Error(

@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "s3-lab-workspace",
   "displayName": "S3 Lab Workspace",
-  "version": "0.3.0",
-  "description": "Search the shared S3 research memory and build editable lab-meeting slides from one install.",
+  "version": "0.4.0",
+  "description": "Search S3 research memory and build restrained, English, figure-first lab-meeting slides.",
   "author": {
     "name": "S3 Lab",
     "url": "https://s3wiki.yonsei.ac.kr/"

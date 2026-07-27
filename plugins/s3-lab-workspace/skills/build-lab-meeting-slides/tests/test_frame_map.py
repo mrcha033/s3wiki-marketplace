@@ -79,6 +79,42 @@ class TemplateFrameMapTests(unittest.TestCase):
             ["title_claim", "subtitle", "meeting_subject"],
         )
 
+    def test_content_default_rewrites_only_title(self) -> None:
+        targets = lab_slides.default_edit_targets(sample_profile()["slides"][1])
+        rewrites = [target for target in targets if target["action"] == "rewrite"]
+        self.assertEqual(
+            [target["contentRef"] for target in rewrites],
+            ["title_claim"],
+        )
+
+    def test_custom_rewrite_cannot_remap_title_copy(self) -> None:
+        plan = {
+            "slides": [
+                slide_entry(1, "content", 2),
+            ]
+        }
+        frame = sample_profile()["slides"][1]
+        plan["slides"][0]["template_frame"]["edit_targets"] = [
+            {
+                "action": "rewrite",
+                "sourceElementId": frame["title_target"]["id"],
+                "sourceName": frame["title_target"]["name"],
+                "contentRef": "headline",
+            }
+        ]
+        with self.assertRaisesRegex(
+            lab_slides.LabDeckError,
+            "unsupported contentRef 'headline'",
+        ):
+            lab_slides.build_template_frame_map(sample_profile(), plan)
+
+        plan["slides"][0]["template_frame"]["edit_targets"][0]["contentRef"] = "title"
+        with self.assertRaisesRegex(
+            lab_slides.LabDeckError,
+            "unsupported contentRef 'title'",
+        ):
+            lab_slides.build_template_frame_map(sample_profile(), plan)
+
     def test_longer_deck_reuses_only_the_declared_content_frame(self) -> None:
         plan = {
             "slides": [

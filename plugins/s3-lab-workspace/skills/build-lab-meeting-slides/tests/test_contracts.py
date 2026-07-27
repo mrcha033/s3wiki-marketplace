@@ -75,6 +75,10 @@ def create_auditable_project(root: Path, builder_text: str) -> tuple[dict, Path,
                     "source_slide": 1,
                     "routing_rationale": "The first supplied slide is the approved cover frame.",
                 },
+                "content": {
+                    "subtitle": "27 July 2026 · Research Lab",
+                    "meeting_subject": "Lab Meeting",
+                },
                 "visual_anchor": "The inherited cover typography and lockup",
                 "coverage": ["opening"],
                 "evidence_refs": [],
@@ -129,6 +133,24 @@ def create_auditable_project(root: Path, builder_text: str) -> tuple[dict, Path,
 
 
 class SchemaAndTemplateContractTests(unittest.TestCase):
+    def test_custom_template_palette_uses_one_accent_family(self) -> None:
+        profile = {
+            "theme": {
+                "colors": {
+                    "lt1": "#FFFFFF",
+                    "dk1": "#111827",
+                    "accent1": "#0353A4",
+                    "accent2": "#FF6600",
+                    "accent3": "#6666FF",
+                }
+            }
+        }
+        palette = lab_slides.active_palette_for_profile(profile, retained_lab_template=False)
+        self.assertEqual(palette["primary"], "#0353A4")
+        self.assertNotIn("#FF6600", palette.values())
+        self.assertNotIn("#6666FF", palette.values())
+        self.assertEqual(palette["soft"], lab_slides.tint_hex("#0353A4"))
+
     def test_load_config_accepts_only_supported_schema_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:
             path = Path(temp_name) / "labdeck.json"
@@ -168,6 +190,20 @@ class SchemaAndTemplateContractTests(unittest.TestCase):
             self.assertFalse(config["build"]["compatibility_roundtrip"])
             self.assertFalse(config["template"]["html_prototype"]["final_source"])
             self.assertEqual(config["build"]["input_pptx"], "work/template/template-starter.pptx")
+            self.assertEqual(config["qa"]["content_contract"]["visible_language"], "en")
+            self.assertEqual(config["qa"]["content_contract"]["title_mode"], "keyword-phrase")
+            self.assertEqual(config["qa"]["content_contract"]["title_max_words"], 3)
+            self.assertEqual(config["style"]["active_palette"], lab_slides.DEFAULT_ACTIVE_PALETTE)
+            self.assertEqual(
+                config["style"]["active_palette_sha256"],
+                lab_slides.active_palette_sha256(lab_slides.DEFAULT_ACTIVE_PALETTE),
+            )
+            self.assertEqual(config["qa"]["visual_contract"]["min_figure_span_ratio"], 0.50)
+            self.assertEqual(config["qa"]["visual_contract"]["min_figure_area_ratio"], 0.18)
+            self.assertEqual(config["qa"]["visual_contract"]["minimum_diagram_nodes"], 2)
+            self.assertEqual(config["qa"]["visual_contract"]["minimum_diagram_labels"], 2)
+            self.assertTrue(config["qa"]["visual_contract"]["require_diagram_connector"])
+            self.assertIn("equation", config["qa"]["content_contract"]["allowed_text_roles"])
 
     def test_html_prototype_persists_an_enforced_html_assisted_native_route(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:
@@ -213,6 +249,13 @@ class SchemaAndTemplateContractTests(unittest.TestCase):
         self.assertNotIn("CUSTOM_SLIDE_BUILDERS", text)
         self.assertIn('spec.type === "line"', text)
         self.assertIn('geometry: "line"', text)
+        self.assertIn("resolvePaletteColor", text)
+        self.assertIn("style.active_palette", text)
+        self.assertIn("text_role", text)
+        self.assertIn("visual_role", text)
+        self.assertIn("allowedRewriteContentRefs", text)
+        self.assertIn("is not an allowed role-bound visible-copy field", text)
+        self.assertNotIn("#0466C8", text)
 
     def test_audit_rejects_a_fresh_deck_builder(self) -> None:
         unsafe_builder = """

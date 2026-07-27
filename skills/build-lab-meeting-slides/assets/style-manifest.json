@@ -8,7 +8,7 @@
     "code": "Courier New"
   },
   "minimum_body_pt": 16,
-  "colors": {
+  "source_theme_colors": {
     "navy": "#001233",
     "structure": "#001845",
     "dark_blue": "#002855",
@@ -21,6 +21,15 @@
     "white": "#FFFFFF",
     "muted": "#5C677D"
   },
+  "active_palette": {
+    "background": "#FFFFFF",
+    "surface": "#FFFFFF",
+    "ink": "#001233",
+    "muted": "#5C677D",
+    "primary": "#0353A4",
+    "focus": "#2269FE",
+    "soft": "#D2E1FE"
+  },
   "rules": {
     "authoring_mode": "exact-clone-edit",
     "cover_source_slide": 1,
@@ -29,6 +38,12 @@
     "content_zone_px": {"x": 71.36, "y": 109.42, "w": 1137.22, "h": 545.01},
     "technical_shapes_remain_editable": true,
     "full_slide_raster_forbidden": true,
-    "generic_card_dashboard_forbidden": true
+    "generic_card_dashboard_forbidden": true,
+    "generated_colors_are_closed_tokens": true,
+    "raw_hex_colors_forbidden": true,
+    "generated_english_is_dictionary_validated": true,
+    "visible_language": "English",
+    "title_mode": "keyword-phrase",
+    "figure_first": true
   }
 }

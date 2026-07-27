@@ -33,6 +33,15 @@ PML_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 
 BBOX_TOLERANCE_PX = 0.75
 NUMBER_PRECISION = 4
+ACTIVE_PALETTE_TOKENS = (
+    "background",
+    "surface",
+    "ink",
+    "muted",
+    "primary",
+    "focus",
+    "soft",
+)
 
 RELATIONSHIP_ATTRS = {
     f"{{{REL_NS}}}id",
@@ -75,6 +84,77 @@ def local_name(expanded_name: str) -> str:
 def normalize_text(value: Any) -> str:
     text = unicodedata.normalize("NFC", str(value if value is not None else ""))
     return text.replace("\r\n", "\n").replace("\r", "\n").replace("\u00a0", " ").strip()
+
+
+def normalize_hex_color(value: Any) -> str | None:
+    text = str(value or "").strip().upper()
+    return text if re.fullmatch(r"#[0-9A-F]{6}", text) else None
+
+
+def active_palette_values(config: dict[str, Any]) -> set[str]:
+    style = config.get("style", {})
+    raw = style.get("active_palette") if isinstance(style, dict) else None
+    if not isinstance(raw, dict):
+        raise CheckError("config style.active_palette must contain a semantic token object")
+    if set(raw) != set(ACTIVE_PALETTE_TOKENS):
+        raise CheckError(
+            "config style.active_palette must use exactly: "
+            + ", ".join(ACTIVE_PALETTE_TOKENS)
+        )
+    normalized = {
+        token: normalize_hex_color(raw.get(token))
+        for token in ACTIVE_PALETTE_TOKENS
+    }
+    invalid = [token for token, color in normalized.items() if color is None]
+    if invalid:
+        raise CheckError(
+            "config style.active_palette has invalid colors for: " + ", ".join(invalid)
+        )
+    payload = json.dumps(
+        normalized,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    expected_hash = sha256_bytes(payload)
+    if str(style.get("active_palette_sha256", "")).strip().casefold() != expected_hash:
+        raise CheckError(
+            "config style.active_palette_sha256 does not match the closed active palette"
+        )
+    return {str(color) for color in normalized.values()}
+
+
+def resolve_layout_color(value: Any, theme: dict[str, Any]) -> str | None:
+    normalized = normalize_hex_color(value)
+    if normalized:
+        return normalized
+    token = str(value or "").strip()
+    colors = theme.get("colors", {}) if isinstance(theme, dict) else {}
+    if token in colors:
+        return normalize_hex_color(colors[token])
+    aliases = {"tx1": "dk1", "bg1": "lt1", "tx2": "dk2", "bg2": "lt2"}
+    if token in aliases:
+        return normalize_hex_color(colors.get(aliases[token]))
+    return None
+
+
+def element_colors(element: dict[str, Any], theme: dict[str, Any]) -> set[str]:
+    output: set[str] = set()
+
+    def visit(value: Any, key: str = "") -> None:
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                visit(child, child_key)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, key)
+        elif key in {"color", "fillColor", "lineColor"}:
+            resolved = resolve_layout_color(value, theme)
+            if resolved:
+                output.add(resolved)
+
+    visit(element)
+    return output
 
 
 def normalize_number(value: float) -> float | int:
@@ -757,10 +837,12 @@ def compare_slide_objects(
     final_layouts: dict[int, dict[str, Any]],
     frame_map: dict[str, Any],
     plan: dict[str, Any],
+    config: dict[str, Any],
     issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
     map_entries = map_entries_by_slide(frame_map)
     plan_entries = plan_entries_by_slide(plan)
+    allowed_palette = active_palette_values(config)
     results: list[dict[str, Any]] = []
 
     for slide in sorted(set(starter_layouts) & set(final_layouts)):
@@ -917,6 +999,7 @@ def compare_slide_objects(
 
         found_declared: set[str] = set()
         frame = (final_layouts[slide].get("slide") or {}).get("frame") or {}
+        theme = final_layouts[slide].get("theme") or {}
         for _, addition in additions:
             name = element_name(addition)
             spec = declared_by_name.get(name)
@@ -989,6 +1072,19 @@ def compare_slide_objects(
                         name=name,
                         expected=normalize_text(spec.get("text")),
                         actual=element_text(addition),
+                    )
+                )
+            actual_colors = element_colors(addition, theme)
+            unexpected_colors = sorted(actual_colors - allowed_palette)
+            if unexpected_colors:
+                issues.append(
+                    issue(
+                        "addition-color-outside-palette",
+                        "Native addition uses colors outside config style.active_palette.",
+                        slide=slide,
+                        name=name,
+                        actual=unexpected_colors,
+                        allowed=sorted(allowed_palette),
                     )
                 )
             if is_large_image(addition, frame, zone) and spec.get("allow_large_raster") is not True:
@@ -1072,13 +1168,15 @@ def run_check(args: argparse.Namespace) -> dict[str, Any]:
     final_path = Path(args.final_pptx).expanduser().resolve()
     map_path = Path(args.map_path).expanduser().resolve()
     plan_path = Path(args.plan).expanduser().resolve()
+    config_path = Path(args.config).expanduser().resolve()
     starter_layout_dir = Path(args.starter_layout_dir).expanduser().resolve()
     final_layout_dir = Path(args.final_layout_dir).expanduser().resolve()
 
     frame_map = load_json(map_path)
     plan = load_json(plan_path)
-    if not isinstance(frame_map, dict) or not isinstance(plan, dict):
-        raise CheckError("frame map and slide plan must both contain JSON objects")
+    config = load_json(config_path)
+    if not isinstance(frame_map, dict) or not isinstance(plan, dict) or not isinstance(config, dict):
+        raise CheckError("frame map, slide plan, and config must contain JSON objects")
     starter_layouts = read_layouts(starter_layout_dir)
     final_layouts = read_layouts(final_layout_dir)
 
@@ -1090,7 +1188,7 @@ def run_check(args: argparse.Namespace) -> dict[str, Any]:
         core_result = compare_template_core(starter_package, final_package, issues)
         layout_result = compare_layout_contract(starter_layouts, final_layouts, issues)
         compare_layout_json_to_package_routes(final_package, final_layouts, issues)
-        object_result = compare_slide_objects(starter_layouts, final_layouts, frame_map, plan, issues)
+        object_result = compare_slide_objects(starter_layouts, final_layouts, frame_map, plan, config, issues)
     finally:
         starter_package.close()
         final_package.close()
@@ -1107,6 +1205,8 @@ def run_check(args: argparse.Namespace) -> dict[str, Any]:
         "mapSha256": sha256_file(map_path),
         "planPath": str(plan_path),
         "planSha256": sha256_file(plan_path),
+        "configPath": str(config_path),
+        "configSha256": sha256_file(config_path),
         "starterLayoutDir": str(starter_layout_dir),
         "finalLayoutDir": str(final_layout_dir),
         "checks": {
@@ -1141,6 +1241,47 @@ def run_self_test() -> dict[str, Any]:
         "text-kind-normalization",
         expected_kind_matches("text", {"kind": "shape", "geometry": "rect", "text": "content"}),
     )
+    palette = {
+        "background": "#FFFFFF",
+        "surface": "#FFFFFF",
+        "ink": "#001233",
+        "muted": "#5C677D",
+        "primary": "#0353A4",
+        "focus": "#2269FE",
+        "soft": "#D2E1FE",
+    }
+    palette_hash = sha256_bytes(
+        json.dumps(
+            palette,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    check(
+        "active-palette-normalization",
+        active_palette_values(
+            {
+                "style": {
+                    "active_palette": palette,
+                    "active_palette_sha256": palette_hash,
+                }
+            }
+        )
+        == set(palette.values()),
+    )
+    check(
+        "addition-color-extraction",
+        element_colors(
+            {
+                "fillColor": "#0353A4",
+                "line": {"lineColor": "accent1"},
+                "text": {"style": {"color": "#001233"}},
+            },
+            {"colors": {"accent1": "#0353A4"}},
+        )
+        == {"#001233", "#0353A4"},
+    )
     return {"schema": SCHEMA, "status": "pass", "tests": tests}
 
 
@@ -1150,6 +1291,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--final-pptx", dest="final_pptx")
     result.add_argument("--map", dest="map_path")
     result.add_argument("--plan")
+    result.add_argument("--config")
     result.add_argument("--starter-layout-dir", dest="starter_layout_dir")
     result.add_argument("--final-layout-dir", dest="final_layout_dir")
     result.add_argument("--out")
@@ -1181,6 +1323,7 @@ def main() -> int:
         "final_pptx",
         "map_path",
         "plan",
+        "config",
         "starter_layout_dir",
         "final_layout_dir",
         "out",
