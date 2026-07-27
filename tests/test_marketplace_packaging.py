@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the unified private Codex and Claude marketplace package."""
+"""Validate the unified OAuth-backed Codex and Claude marketplace package."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ PLUGIN = "s3-lab-workspace"
 SLIDE_SKILL = "build-lab-meeting-slides"
 MCP_NAME = "s3-research-memory"
 MCP_URL = "https://s3wiki.yonsei.ac.kr/mcp"
+APP_ID = "asdk_app_6a669c14a28481919c2f2980b06d1628"
+PLUGIN_VERSION = "0.3.0"
 LEGACY_PLUGINS = ("build-lab-meeting-slides", "s3-research-memory")
 PERSONAL_APP_IDENTIFIERS = (
     "dev-6a58e7a411988191a74fda9cfcf6b604",
@@ -44,29 +46,32 @@ def main() -> None:
     assert codex_entry["source"]["path"] == f"./plugins/{PLUGIN}"
     assert codex_entry["policy"] == {
         "installation": "AVAILABLE",
-        "authentication": "ON_USE",
+        "authentication": "ON_INSTALL",
     }
     assert codex_entry["category"] == "Productivity"
     assert claude_entry["source"] == f"./plugins/{PLUGIN}"
-    assert claude_entry["version"] == "0.2.0"
+    assert claude_entry["version"] == PLUGIN_VERSION
 
     plugin = ROOT / "plugins" / PLUGIN
     codex_manifest_path = plugin / ".codex-plugin/plugin.json"
     claude_manifest_path = plugin / ".claude-plugin/plugin.json"
+    app_path = plugin / ".app.json"
     mcp_path = plugin / ".mcp.json"
     codex_manifest = load_json(codex_manifest_path)
     claude_manifest = load_json(claude_manifest_path)
+    app = load_json(app_path)
     mcp = load_json(mcp_path)
 
     assert codex_manifest["name"] == PLUGIN
-    assert codex_manifest["version"] == claude_manifest["version"] == "0.2.0"
+    assert codex_manifest["version"] == claude_manifest["version"] == PLUGIN_VERSION
     assert codex_manifest["skills"] == "./skills/"
+    assert codex_manifest["apps"] == "./.app.json"
     assert codex_manifest["mcpServers"] == "./.mcp.json"
-    assert "apps" not in codex_manifest
     assert claude_manifest["name"] == PLUGIN
     assert claude_manifest["skills"] == "./skills/"
     assert "mcpServers" not in claude_manifest
 
+    assert app == {"apps": {MCP_NAME: {"id": APP_ID}}}
     assert set(mcp) == {"mcpServers"}
     assert set(mcp["mcpServers"]) == {MCP_NAME}
     server = mcp["mcpServers"][MCP_NAME]
@@ -94,6 +99,7 @@ def main() -> None:
         claude_marketplace_path,
         codex_manifest_path,
         claude_manifest_path,
+        app_path,
         mcp_path,
     )
     active_text = "\n".join(path.read_text(encoding="utf-8") for path in active_documents)
@@ -105,7 +111,7 @@ def main() -> None:
         text = installer.read_text(encoding="utf-8")
         assert PLUGIN in text and "S3RM_MCP_TOKEN" not in text
 
-    print("unified private marketplace packaging: PASS")
+    print("unified OAuth marketplace packaging: PASS")
 
 
 if __name__ == "__main__":
