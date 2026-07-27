@@ -7,7 +7,6 @@ Codex·Claude Code 플러그인입니다.
 
 - 중앙 `S3 Research Memory` 검색·근거 확인·정책에 따른 메모 작성
 - 연구실 PPTX 템플릿을 보존하는 편집 가능한 랩미팅 슬라이드 제작
-- 시스템·OS·AI serving 도식과 선택형 Manim GIF/동반 MP4 제작·검증
 
 사용자가 개인 Codex 앱 ID, 로컬 MCP 서버, Docker와 별도 위키를 만들 필요는 없습니다.
 두 클라이언트 모두 `https://s3wiki.yonsei.ac.kr/mcp`에 직접 연결합니다.
@@ -92,7 +91,5 @@ claude plugin validate plugins/s3-lab-workspace --strict
 릴리스와 사용자 권한 부여 절차는
 [관리자 체크리스트](docs/admin-release.md)에 있습니다.
 
-최종 프레젠테이션은 편집 가능한 PowerPoint 기본 개체를 우선하며, 시각 비율은
-도식 종류별 범위로 제한합니다. 시간 의존 상호작용만 짧은 GIF 또는 포스터가 포함된
-동반 MP4를 사용하고, 구조 QA·시각 검토·사용자 승인은 서로 다른 검증 단계로
-유지합니다.
+최종 프레젠테이션은 편집 가능한 PowerPoint 기본 개체로 만들고, 실제 PPTX와
+렌더된 몽타주를 확인한 뒤 전달합니다.

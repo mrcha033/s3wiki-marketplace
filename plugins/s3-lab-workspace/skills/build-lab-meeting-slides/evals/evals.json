@@ -3,74 +3,46 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Use the supplied two-slide Yonsei S3 lab-meeting template to turn my research update into a polished six-slide deck. Keep the template's cover, top rule, left rail, logo lockup, title geometry, Arial typography, and speaker-note behavior. The final PPTX must remain editable; do not normalize the final through LibreOffice.",
-      "expected_output": "A six-slide editable PPTX and QA bundle produced by exact clone/edit: source slide 1 routes to the cover, source slide 2 is duplicated for five content slides, inherited targets are rewritten, and any new native content stays inside the mapped body zone.",
+      "prompt": "Use the supplied two-slide Yonsei S3 lab-meeting template to turn my research update into a polished six-slide deck. Keep the cover, top rule, left rail, logo lockup, title geometry, Arial typography, and speaker notes. The final PPTX must remain editable.",
+      "expected_output": "A coherent six-slide editable PPTX that reuses the supplied cover and content frames, tells one cumulative story, and has been inspected as full-size rendered slides.",
       "files": [
         "assets/lab-meeting-template.pptx"
       ],
       "expectations": [
-        "The project uses schema_version 2, authoring_mode template-native, and template.mode exact-clone-edit.",
-        "The template is inspected and hash-pinned before authoring, with a generated template profile, frame map, and starter PPTX.",
-        "The frame map routes output slide 1 to source slide 1 and output slides 2 through 6 to source slide 2 using duplicate-slide reuse.",
-        "The final authoring builder imports the prepared starter and exports the same presentation; it does not create a fresh presentation or fresh slides.",
-        "New native editable elements are bounded by the inherited content zone and do not overlap inherited chrome.",
-        "All generated visible copy and notes pass the bundled English lexicon; titles are one-line 1-3 word keyword phrases rather than sentences.",
-        "Generated objects use only the closed semantic palette tokens, with no raw hex colors, gradients, shadows, or rotating section accents.",
-        "Every body slide has one proportionate content-specific visual with declared visual/text roles and no decorative strapline or filler prose.",
-        "LibreOffice is used only as a compatibility probe, never as the default final-source promotion path.",
-        "Mechanical QA and two-pass full-slide visual review both pass with current deck, render, and source-manifest hashes."
+        "The supplied source slides establish the visual style.",
+        "The opening reuses source slide 1 and the body reuses source slide 2.",
+        "Titles and inherited objects are edited in place.",
+        "New explanatory diagrams remain editable and fit the existing body area.",
+        "The final montage is visually inspected and obvious issues are fixed."
       ]
     },
     {
       "id": 2,
-      "prompt": "Build a 12-slide lab meeting from this two-slide template and my source deck. Use one cover, then organize the body as context, method, three mechanism slides, two evidence slides, limitations, next steps, and appendix. Preserve the lab template exactly while giving each content slide one clear visual anchor and role-appropriate notes.",
-      "expected_output": "A coherent 12-slide template-native deck whose approved content frame is deliberately reused, with explicit source-slide routing rationale, bounded editable mechanisms, complete coverage, and shorter notes for structural slides than for mechanism/evidence slides.",
+      "prompt": "Revise this 12-slide systems lab meeting. Keep its template and factual content, but make the story easier to follow, shorten dense slides, add useful mechanism diagrams, and improve the speaker notes.",
+      "expected_output": "A clearer editable revision that preserves the source deck's identity, improves the narrative and visuals in the actual slides, and avoids unnecessary process documents.",
       "files": [
         "assets/lab-meeting-template.pptx"
       ],
       "expectations": [
-        "Every output slide has a sequential slide number, 1-3 word English keyword title in title_claim, narrative job, visual anchor, evidence references, notes reference, and template_frame object with routing rationale.",
-        "Only approved source frames are duplicated; the longer output does not require or invent additional template layouts.",
-        "Each content slide has one primary native editable visual inside the inspected safe zone, with semantic text/visual roles and an anchor-specific preferred and hard bounding-box-area budget.",
-        "Oversized figures above the hard maximum fail, figures outside the preferred band produce review warnings, and the inspected source-frame role and safe-zone denominator cannot be spoofed.",
-        "The complete deck uses one closed semantic palette and contains no filler subtitles, straplines, transition prose, or placeholder text.",
-        "Cover, divider, closing, and appendix notes use their structural ranges, while mechanism and evidence slides use the 90 to 190 word range unless explicitly overridden.",
-        "The coverage matrix and claims ledger account for all required topics and every evidence reference.",
-        "Template fidelity QA verifies inherited chrome and title geometry across the full 12-slide output."
+        "The communication goal and central takeaway shape the sequence.",
+        "Each slide has one main job and an audience-facing title.",
+        "Dense copy is shortened or split instead of silently shrinking the type.",
+        "Notes are adapted to slide roles and do not pad unsupported interpretation.",
+        "Only the files needed to build, render, and deliver the deck are produced."
       ]
     },
     {
       "id": 3,
-      "prompt": "I can prototype the dense system diagram faster in HTML. Let me iterate on that composition, but deliver the final lab-meeting deck as an editable PPTX that still obeys the attached template. Do not flatten the whole slide into screenshots or replace the master/layout structure.",
-      "expected_output": "An HTML-assisted-native workflow: HTML is used only for disposable composition exploration, the accepted diagram is rebuilt as native editable PowerPoint objects inside the cloned template body zone, and the final PPTX retains inherited master/layout structure and passes template-fidelity QA.",
+      "prompt": "For one slide, show how requests move through an AI serving scheduler. Use restrained motion only if it makes the state change easier to understand, and keep a static fallback.",
+      "expected_output": "A short serving-flow animation or a static editable diagram, chosen for explanatory value, with a poster frame when motion is used.",
       "files": [
         "assets/lab-meeting-template.pptx"
       ],
       "expectations": [
-        "The route is explicitly labeled html-assisted-native and the HTML prototype is never treated as the final source of truth.",
-        "The accepted composition is reconstructed as native editable text, shapes, lines, and connectors in the prepared template starter.",
-        "The prototype and native rebuild both use English keyword titles, the same closed semantic palette, and one proportionate visual composition without filler copy.",
-        "The workflow rejects direct HTML to PPTX round-trip as the default because it would lose master, layout, placeholder, notes, or editability semantics.",
-        "Any raster fallback is explicit, scoped, and marked partial or non-editable rather than silently used for the whole slide.",
-        "The resulting PPTX preserves the supplied template chrome and passes both mechanical template-fidelity checks and full-slide visual review."
-      ]
-    },
-    {
-      "id": 4,
-      "prompt": "Build an English systems lab deck that explains an OS request path and an AI-serving continuous-batching interaction. Keep static diagrams restrained, and use Manim, GIF, or video only where motion makes component interaction clearer. Preserve the supplied PPTX and do not add narration text.",
-      "expected_output": "A template-native systems deck with source-bound static or progressive diagrams by default, at most one short motion clip where time-dependent interaction requires it, an embedded GIF or companion H.264 MP4, and complete static fallbacks.",
-      "files": [
-        "assets/lab-meeting-template.pptx"
-      ],
-      "expectations": [
-        "The plan uses the systems, OS, and AI-serving domain grammar rather than generic cards or decorative animation.",
-        "Manim runs through the pinned isolated uvx runtime with a low-quality smoke render before production output.",
-        "Every motion asset has a project-local scene source, nonblank supplied source references, an actual decoded duration of 3-8 seconds, concise English alt text, dimension-matched valid start/end PNGs, and a static fallback.",
-        "GIF loop metadata, decoded project-palette fidelity, and domain/archetype coherence are verified from the media rather than trusted from manifest declarations.",
-        "An embedded GIF is declared as one bounded source-bound image and keeps its bytes in the PPTX; a companion MP4 uses H.264 with AAC or no audio and places its poster in the deck.",
-        "Motion appears on no more than 25 percent of the deck, one clip per slide, with stable components and no more than five moving tokens.",
-        "PowerPoint web fallback and companion-file boundaries are stated explicitly; no direct OOXML video injection is used.",
-        "Titles remain 1-3 word English keyword phrases and no subtitles, transition prose, kinetic typography, invented metrics, or filler text are added."
+        "Motion is limited to the request, queue, scheduler, GPU, and token transition.",
+        "Colors and labels match the active deck.",
+        "A poster frame preserves the explanation when animation does not play.",
+        "No decorative background motion or unrelated animation is added."
       ]
     }
   ]

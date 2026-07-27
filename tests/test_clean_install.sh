@@ -44,7 +44,7 @@ codex_mcp="$(codex mcp list --json)"
 jq -e '
   [.installed[] | select(
     .pluginId == "s3-lab-workspace@s3wiki-marketplace"
-    and .version == "0.5.0"
+    and .version == "0.6.0"
     and .enabled == true
   )] | length == 1
 ' <<<"$codex_plugins" >/dev/null
@@ -52,7 +52,7 @@ jq -e '
 jq -e '
   [.[] | select(
     .id == "s3-lab-workspace@s3wiki-marketplace"
-    and .version == "0.5.0"
+    and .version == "0.6.0"
     and .enabled == true
     and .mcpServers."s3-research-memory".url
       == "https://s3wiki.yonsei.ac.kr/mcp"

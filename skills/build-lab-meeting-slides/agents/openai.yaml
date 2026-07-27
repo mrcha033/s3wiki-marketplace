@@ -1,4 +1,4 @@
 interface:
   display_name: "Build Lab Meeting Slides"
-  short_description: "Build restrained English systems decks from PPTX"
-  default_prompt: "Use $build-lab-meeting-slides to build an editable systems lab deck with English keyword titles, a quiet closed palette, proportionate visuals, and source-bound motion only when it clarifies an interaction."
+  short_description: "Build editable research decks from a PPTX template"
+  default_prompt: "Use $build-lab-meeting-slides to build the editable lab-meeting deck from my sources and PPTX template. Focus on the deck itself, preserve the supplied visual style, and keep process artifacts to the minimum needed to build and review it."

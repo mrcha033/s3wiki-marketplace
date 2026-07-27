@@ -1,230 +1,41 @@
-# Visual-language contract
+# Visual language
 
-## Contents
+Use the supplied deck's visual language. The bundled template is only the fallback when the user has not supplied one.
 
-- Precedence
-- English and title rules
-- Closed color system
-- Proportionate visual composition
-- Motion boundary
-- No-filler rule
-- Typography and editability
-- Incremental and hardware figures
-- Design precedents
-- HTML boundary
+## Composition
 
-## Precedence
+Choose the composition that best explains the slide:
 
-Treat the user-designated PPTX as the structural and brand contract. If no newer
-template is supplied, use `assets/lab-meeting-template.pptx` and verify its hash
-against `assets/style-manifest.json`.
+- flow for movement or causality;
+- timeline for sequence;
+- before/after for a change;
+- tree for hierarchy;
+- table for exact comparison;
+- chart for quantitative relationships;
+- code plus mechanism for implementation changes;
+- sourced figure for published evidence.
 
-Apply this order:
+Avoid turning a research slide into an application dashboard. Repeated cards, badges, pills, icon rows, and decorative metric strips usually weaken the story.
 
-1. explicit user brief;
-2. inherited source objects and measured layout evidence;
-3. approved content and evidence;
-4. closed copy, palette, and figure contracts;
-5. generic design guidance.
+## Typography
 
-Do not introduce a second template or visual reference. Preserve masters,
-layouts, title geometry, logos, rails, rules, and source-authentic institutional
-marks. Generated body content remains subject to the stricter rules below.
+Preserve the source typography. Use clear title claims and short labels. Keep normal body text at least 16 pt unless the template demonstrates another readable size. Inspect Korean and CJK wrapping at full render size.
 
-## English and title rules
+## Color
 
-- Write all generated visible copy and speaker notes in English.
-- Preserve non-English text only inside locked inherited institutional marks,
-  exact citations, code literals, or equations.
-- Translate or replace non-English labels embedded in figures before delivery.
-- Keep the schema key `title_claim`, but write a 1–3 word keyword/noun phrase.
-- Keep titles on one line, normally within 42 characters.
-- Do not use terminal punctuation, clauses, pronouns, or sentence headlines.
-- Keep the full claim in the figure, evidence relationship, or narration.
+Start with the inherited colors. Use one accent to direct attention and neutral tones for structure. Do not introduce a second palette merely because an example asset uses it.
 
-Examples:
+## Technical diagrams
 
-| Use | Reject |
-|---|---|
-| `Memory Coalescing` | `Coalesced access removes redundant transactions` |
-| `Ablation Effects` | `The ablation shows that caching matters` |
-| `Failure Modes` | `Why the current kernel still fails` |
-| `Next Experiments` | `We will test three alternatives next` |
+Use simplified but accurate abstractions. Label what is known, distinguish inference, and do not imply undocumented physical topology.
 
-## Closed color system
+For systems and GPU topics:
 
-Record the full source theme only as provenance. Generated objects may use only
-the semantic tokens in `style.active_palette`.
+- show data paths, work distribution, memory access, scheduling, or state change;
+- pair code changes with the mechanism they affect;
+- pair measured results with the exact scope of the measurement;
+- avoid decorative hardware drawings that look authoritative but are not sourced.
 
-For the retained Yonsei S3 template:
+## Images and motion
 
-| Token | Value | Use |
-|---|---|---|
-| `background` | `#FFFFFF` | slide canvas |
-| `surface` | `#FFFFFF` | unfilled or white figure surfaces |
-| `ink` | `#001233` | primary text and dark structure |
-| `muted` | `#5C677D` | secondary labels and sources |
-| `primary` | `#0353A4` | connectors, axes, and main data series |
-| `focus` | `#2269FE` | one declared focal change or result |
-| `soft` | `#D2E1FE` | restrained grouping or comparison fill |
-
-Use token names in `slide-plan.json`; never enter raw hex values. Keep white and
-ink dominant. Use `primary` for stable structure and `focus` for one declared
-target. Do not rotate accent colors by section, use rainbow scales, gradients,
-shadows, decorative red strokes, or color without a semantic reason. Repeat the
-same concept in the same color throughout the deck. Encode critical distinctions
-with labels, position, or line style as well as color.
-
-## Proportionate visual composition
-
-Give every body slide one primary figure, plot, table, comparison, image, code
-delta, or mechanism diagram. Keep it large enough to read but small enough to
-preserve hierarchy and whitespace. The automated `figure_bbox_area_ratio` is
-the figure's clipped bounding-box area divided by the approved body-zone area;
-it is not a linear width. Each anchor maps to a pinned budget:
-
-| Profile | Anchors | Preferred bbox area | Hard bbox area | Minimum information area |
-|---|---|---:|---:|---:|
-| context | context, roadmap, timeline | 18–30% | 12–40% | 3% |
-| architecture | architecture, system | 26–40% | 18–50% | 5% |
-| interaction | flow, mechanism, pipeline, process | 28–42% | 20–52% | 6% |
-| evidence | plots, comparisons, tables, results | 24–38% | 16–48% | 5% |
-| code | code, code delta | 22–34% | 14–44% | 4% |
-| media | image, paper figure, screenshot, motion | 28–42% | 20–50% | 8% |
-
-Hard-range violations fail. Preferred-band violations are review warnings,
-including oversized visuals. Text-only slides, large prose boxes, and
-decorative rectangles do not satisfy the figure gate. Information-bearing
-visual-role geometry has a separate floor so widely separated tiny marks cannot
-fake a primary visual.
-
-For `process`, `mechanism`, `flow`, `pipeline`, `architecture`, and `system`
-anchors built from native primitives, use at least two meaningful
-`diagram-node` objects joined by a `connector`, plus at least two concise
-figure labels. A sourced image, data-backed plot, data-backed table, or editable
-code view is an alternate figure and does not need synthetic nodes. Role labels
-alone never prove structure: a rectangle tagged `plot` is still a rectangle.
-Primitive plots need two axes and at least two data marks; image/table/chart
-objects need an explicit source or data reference.
-
-Use this order:
-
-1. select the one message and evidence;
-2. choose the figure family that reveals it;
-3. establish reading order and stable coordinates;
-4. add direct labels, axes, units, and up to three brief callouts;
-5. remove prose, duplicate legends, ornamental icons, and unexplained color.
-
-The selected source frame and its inspected safe zone are authoritative.
-`template_frame.role` must match the source-frame role, and a custom add zone
-must exactly match `safe_content_zone`; neither may be relabeled or shrunk to
-weaken the figure budget.
-
-For paper figures, do not paste a dense multi-panel manuscript figure unchanged.
-Select the relevant panel or rebuild the comparison, enlarge labels and axes,
-remove irrelevant series and gridlines, and preserve source provenance. Results
-normally use one plot or panel per slide. Methods normally use one pipeline,
-architecture, or mechanism diagram. Comparisons use a direct two-state or
-before/after composition with stable coordinates.
-
-Give each text-bearing native element a `text_role`:
-`figure-label`, `axis-label`, `legend`, `callout`, `annotation`, `source`,
-`metadata`, `code`, `table`, or `equation`.
-
-Give each non-text native element a `visual_role`:
-`diagram-node`, `connector`, `data-mark`, `axis`, `plot`, `table`, `code`,
-`image`, `annotation`, or `boundary`.
-
-Treat those roles as audited declarations. Boundary and annotation rectangles
-do not contribute to information-bearing figure area. Primitive plots require
-orthogonal line axes and at least two numeric or source-bound data marks.
-Chart/plot objects require numeric series/data or a bound source reference;
-string-only labels do not establish plotted evidence.
-
-## Motion boundary
-
-Use progressive native slides for discrete state changes. Use a short
-source-bound Manim GIF only when time, queueing, concurrency, ownership, or
-state transfer is materially clearer through motion. Use one clip, 3–8 seconds,
-stable component coordinates, no more than five moving tokens, and meaningful
-start/end frames. Keep motion to at most 25% of the deck.
-
-The builder embeds GIF bytes as a bounded `image`. It does not author native
-PowerPoint video. A longer or higher-fidelity MP4 is a companion H.264/AAC asset
-with a poster in the deck; direct OOXML video injection is forbidden. Read
-[motion-and-domain-visuals.md](motion-and-domain-visuals.md) for systems, OS,
-and AI-serving visual grammar.
-
-## No-filler rule
-
-Visible words exist only to read the figure or provide required metadata.
-Do not add:
-
-- decorative subtitles, straplines, slogans, or transition prose;
-- repeated takeaway sentences below a figure;
-- internal workflow terms, prompt text, preset names, or production notes;
-- placeholders such as TODO, TBD, sample text, or click-to-add prompts;
-- invented captions, claims, numbers, people, quotes, or evidence.
-
-Keep ordinary body slides within 45 generated visible words. Keep each callout
-within 12 words and use no more than three. Put explanation, interpretation,
-transitions, caveats, and provenance detail in English speaker notes.
-Body-frame rewrites are title-only by default. Do not smuggle visible prose
-through arbitrary `content` fields; use role-tagged native elements for concise
-figure copy and provenance.
-
-## Typography and editability
-
-Preserve inherited typography, spacing, insets, alignment, and title geometry.
-Use Courier New for editable code only when the source has no code style.
-Keep technical labels at least 16 pt. Shorten, restructure, or split instead of
-shrinking. Audit direct object fonts and theme references.
-
-Use native editable objects for arrays, matrices, lanes, addresses, memory
-paths, arrows, synchronization boundaries, code deltas, tables, charts, and
-simple conceptual hardware maps. Create connectors before nodes. Use authentic
-raster assets for photographs, screenshots, sourced figures, and approved
-illustration. A slide-sized raster wrapper is a Critical native-mode defect.
-Use a native `rightArrow` shape when the shipped scaffold needs a simple
-directional link; do not rely on unverified arrowhead metadata on a free line.
-
-## Incremental and hardware figures
-
-Keep unchanged objects at identical coordinates across incremental slides.
-Ghost the previous state and highlight only the changed code line, lane mapping,
-address, synchronization, grid geometry, or measured result.
-
-Label conceptual hardware diagrams `conceptual — not to scale`. Distinguish
-memory hierarchy, scheduler/warp state, allocation limits, architectural maxima,
-and measured device attributes. Do not imply undocumented physical pipelines or
-invent die-level detail.
-
-## Design precedents
-
-This contract adapts transferable patterns from:
-
-- Anthropic's public PPTX skill: dominant palette, repeated motif, visual on
-  every slide, placeholder search, and full-deck render review:
-  <https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md>
-- Microsoft PowerPoint guidance: minimal text, consistent backgrounds, clear
-  graphics, and deck-wide color coherence:
-  <https://support.microsoft.com/en-us/powerpoint/tips-for-creating-and-delivering-an-effective-presentation>
-- MIT AeroAstro Communication Lab: one message per slide, succinct titles, and
-  presentation-specific figure simplification:
-  <https://mitcommlab.mit.edu/aeroastro/commkit/slide-design/>
-- PLOS Computational Biology: visualization-led slides, short text fragments,
-  and splitting dense manuscript figures:
-  <https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009554>
-- Nature Research Figure Guide: efficient panels, high contrast, restrained
-  palettes, and avoidance of rainbow/red-green encodings:
-  <https://research-figure-guide.nature.com/figures/building-and-exporting-figure-panels/>
-
-The user-specific keyword-title rule overrides sources that prefer
-assertion/sentence headlines.
-
-## HTML boundary
-
-An HTML prototype must use the inspected canvas, body zone, active palette,
-English copy contract, and figure grammar. Reconstruct the accepted composition
-in the native starter PPTX. Direct conversion or rasterization does not inherit
-the original master/layout contract and remains a partial fallback.
+Use authentic images for screenshots, photos, and published figures. Use editable shapes for mechanisms. Use motion only when the temporal change itself carries meaning, and provide a poster frame so the slide is still understandable when animation does not play.
