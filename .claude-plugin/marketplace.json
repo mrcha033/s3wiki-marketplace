@@ -10,8 +10,8 @@
       "name": "s3-lab-workspace",
       "displayName": "S3 Lab Workspace",
       "source": "./plugins/s3-lab-workspace",
-      "description": "Search S3 research memory and build restrained, English, figure-first lab-meeting slides.",
-      "version": "0.4.0",
+      "description": "Search S3 research memory and build restrained English systems decks with optional source-bound motion.",
+      "version": "0.5.0",
       "author": {
         "name": "S3 Lab"
       },

@@ -31,7 +31,7 @@ The generated `template-frame-map.json` routes every output slide to a proven so
 
 HTML is useful as a disposable composition sandbox when browser iteration materially improves layout decisions. Apply the slides-grab ideas there:
 
-1. constrain the prototype to the inspected slide size, bounded body zone, inherited Arial/type scale, closed semantic palette, English keyword-title contract, and figure-first density budget;
+1. constrain the prototype to the inspected slide size, bounded body zone, inherited Arial/type scale, closed semantic palette, English keyword-title contract, and anchor-specific figure budget;
 2. validate the HTML and render fresh PNG evidence;
 3. run the same system-contract and audience-impact reviews;
 4. rebuild the accepted composition with native editable objects in `template-starter.pptx`;

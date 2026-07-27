@@ -21,15 +21,16 @@
 5. Audit the content contract: English generated copy/notes, 1–3 word keyword titles, text roles, visible-word budget, and no filler/placeholders.
 6. Preflight every mapped `title_claim` against its actual slide-level starter title bbox and inherited run metrics.
 7. Audit topic coverage, slide-plan completeness, and every numeric claim.
-8. Audit the visual contract: closed semantic palette, visual roles, content-specific anchor, primary-figure span, source/claim basis, and composition-family diversity.
-9. Build the native editable PPTX from the starter.
-10. Attach role-aware English notes and run package/overflow checks.
-11. Render every slide full-size and create a montage.
-12. Compare starter and final evidence with the template-fidelity gate, including generated-addition colors.
-13. Run Pass A and Pass B against the current full-size renders.
-14. Fix findings, rerender, and repeat both reviews.
-15. Obtain explicit user acceptance for the reviewed final deck, pinning its SHA-256.
-16. Run the disposable compatibility probe and final package-integrity check.
+8. Audit the visual contract: closed semantic palette, visual roles, content-specific anchor, anchor-specific figure budget, source/claim basis, and composition-family diversity.
+9. Audit optional motion: supplied-source binding, sparse usage, duration, format, scene source, poster/end frames, and static fallback.
+10. Build the native editable PPTX from the starter.
+11. Attach role-aware English notes and run package/overflow checks.
+12. Render every slide full-size and create a montage.
+13. Compare starter and final evidence with the template-fidelity gate, including generated-addition colors.
+14. Run Pass A and Pass B against the current full-size renders.
+15. Fix findings, rerender, and repeat both reviews.
+16. Obtain explicit user acceptance for the reviewed final deck, pinning its SHA-256.
+17. Run the disposable compatibility probe and final package-integrity check.
 
 No old render or review report survives a material edit.
 
@@ -72,7 +73,8 @@ The automated runner must fail on:
 - failed LibreOffice probe for notes digest or slide count when enabled;
 - stale or failing Pass A/Pass B reports.
 - missing `content_contract` or `visual_contract` on a new project;
-- text-led anchors, a primary-figure span below 50%, authenticated information-bearing area below 18%, a missing bounded figure zone, forbidden generic composition families, excessive family/signature repetition, or body-zone underfill;
+- text-led anchors, a figure outside its anchor-specific hard bounding-box-area range, authenticated information-bearing area below its profile floor, a missing bounded figure zone, forbidden generic composition families, excessive family/signature repetition, or source-frame role/safe-zone spoofing;
+- a motion asset without a source-bound scene, 3–8 second duration, poster, end-state frame, static fallback, English alt text, exact slide binding, or supported delivery; more than one clip per slide or motion beyond the deck limit;
 - native process/mechanism/architecture figures without at least two non-text nodes, two concise labels, and one rendered line/path/arrow connector;
 - semantic-role spoofing such as one empty rectangle tagged `plot`, an unrelated full-zone object, or decorative boundary/annotation area; plot primitives need orthogonal line axes plus numeric or source-bound data marks, while chart/table/image objects need explicit data or source references;
 - `qa.user_acceptance.status=pending` or an acceptance record whose deck SHA does not match the current final PPTX.
@@ -91,12 +93,24 @@ Also inspect every full-slide render for:
 - one-pixel seams or unexpected movement introduced by conversion;
 - body elements outside the approved insertion zone.
 
-The visual-contract gate uses two different heuristics. The 18% visual-role
-union-area floor detects empty shells; the 50% primary-figure bounding-span floor
-enforces a figure-led composition. Target 60–75% in review. Body slides cannot
-self-authorize underfill or a figure exception; use a true divider role when no
-body figure is appropriate. A family may repeat for a deliberate comparison
-sequence only when `repeat_group` explains it and Pass B confirms readability.
+The visual-contract gate uses two different heuristics. The
+`figure_bbox_area_ratio` measures the clipped bounding-box area, not a linear
+width. The information-area ratio uses the union of authenticated
+information-bearing geometry and detects empty shells. Anchor-specific profiles
+set preferred bands, hard minima/maxima, and information-area floors. A hard
+violation fails; leaving the preferred band emits a Pass B warning, including
+oversized figures. Body slides cannot self-authorize a figure exception. A
+family may repeat for a deliberate comparison sequence only when `repeat_group`
+explains it and Pass B confirms readability.
+
+The motion gate is separate. Embedded GIF is allowed only as a bounded,
+source-bound `image`; companion MP4 must be H.264/AAC or silent and uses its
+poster in the deck. The gate reads actual GIF frame delays and infinite-loop
+metadata, probes actual MP4 duration and codecs, validates proof PNG headers and
+dimensions, checks domain/archetype coherence, and samples decoded pixels
+against blends of the project's active palette. Initial and final proof frames
+are required because PowerPoint web does not animate GIFs. Direct OOXML video
+injection remains forbidden.
 
 `audit` writes `reports/title-fit-preflight.json`. Each mapped title check identifies the actual top-level starter element, font file, inherited run size, usable bbox after insets, measured unwrapped width, required line count, and maximum line count. The preflight intentionally ignores same-named inherited layout/master elements. It fails on clear measured overflow before `finalize`. If Pillow or an exact local font file is unavailable, it records `status: skipped` and emits a warning; this is not evidence that the title fits, so Pass B must close the typography check from the full-size render.
 
@@ -150,7 +164,7 @@ Include a findings table with slide number, finding, severity, fix, and status. 
 
 Pass B is read-only and opens every full-size render:
 
-- one job, one short keyword title, and one dominant figure per slide;
+- one job, one short keyword title, and one proportionate primary visual per slide;
 - mechanism/evidence readable before prose;
 - 1-to-1 comparability across incremental slides;
 - exact code/arrow/address delta visible;
@@ -159,6 +173,7 @@ Pass B is read-only and opens every full-size render:
 - consistent color meaning and one declared focus target;
 - plateau/regression control legibility;
 - main point graspable in 3–5 seconds.
+- static fallback still communicates the interaction when motion does not play.
 
 Use the same fingerprint fields as Pass A, with the Pass B title. Include a located findings table.
 

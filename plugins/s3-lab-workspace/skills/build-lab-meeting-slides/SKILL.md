@@ -1,6 +1,6 @@
 ---
 name: build-lab-meeting-slides
-description: Build or revise polished, editable PowerPoint lab-meeting decks from a supplied PPTX template, research sources, code, transcripts, and optional GPU evidence. Use whenever the user asks for a lab meeting, research talk, CUDA/performance deck, or says to preserve a lab/corporate PPTX template. The skill defaults to exact source-slide cloning, native editable objects, detailed template fidelity QA, audience-first narrative, and role-aware speaker notes; it can use HTML only as an optional visual prototype, never as an unmarked fidelity shortcut.
+description: Build or revise polished, editable PowerPoint lab-meeting decks from a supplied PPTX template, research sources, code, transcripts, and optional GPU evidence. Use whenever the user asks for a lab meeting, research talk, systems, OS, CUDA, AI-serving, or performance deck, or says to preserve a lab/corporate PPTX template. The skill defaults to exact source-slide cloning, restrained profile-sized native visuals, optional source-bound Manim GIF or companion video, detailed template fidelity QA, audience-first narrative, and role-aware speaker notes; it can use HTML only as an optional visual prototype, never as an unmarked fidelity shortcut.
 ---
 
 # Build Lab Meeting Slides
@@ -14,7 +14,7 @@ Apply these rules to every generated deck. They are pinned by the skill and cann
 - Write all generated visible copy and speaker notes in English. Preserve non-English text only when it is locked inside an inherited logo, institutional mark, citation, code literal, or equation.
 - Use keyword titles, not sentence headlines. The schema key remains `title_claim` for compatibility, but its value must be a one-line 1–3 word English noun/keyword phrase, normally no more than 42 characters, with no terminal punctuation or clause markers. Prefer `Memory Coalescing`, `Ablation Effects`, or `Next Experiments`; reject `Coalesced access removes redundant transactions`.
 - Add no filler. Do not invent subtitles, straplines, transition prose, summaries, slogans, decorative captions, or internal process text. Keep explanations in speaker notes. Visible text is limited to required metadata, figure labels, axes, legends, concise annotations, evidence callouts, code deltas, and sources. When the retained cover maps a subtitle/date-presenter field, fill it only with compact required metadata.
-- Make one content-specific figure, plot, table, image, comparison, or mechanism diagram the primary read on every body slide. Target 60–75% of the body zone; the automated minimum figure-span gate is 50%. A text box or large decorative rectangle is not a figure.
+- Make one content-specific figure, plot, table, image, comparison, or mechanism diagram the primary read on every body slide, but keep it proportionate. The pinned contract derives an anchor-specific preferred band and hard minimum/maximum from the figure bounding-box area. Typical preferred bands are 22–42% of the body zone, not 60–75%. A text box or large decorative rectangle is not a figure.
 - Use the closed semantic palette declared in `style.active_palette`. For the retained template, use only `background`, `surface`, `ink`, `muted`, `primary`, `focus`, and `soft`. Never enter raw hex colors in slide-plan additions, rotate colors by section, add gradients/shadows, or use more than one focus treatment on a slide.
 - Give every text-bearing native element a `text_role` and every non-text element a `visual_role`. Use these roles to prove that each object carries information rather than decoration.
 
@@ -30,6 +30,9 @@ Use these ideas from the named companion skills:
 - `frontend-design`: a subject-specific visual thesis, a compact token system, one justified signature, no filler copy, and self-critique against generic defaults.
 - `template-creator`: retain the original Office file and a verified preview as hash-pinned visual provenance.
 - Canva branded presentations: separate the approved visual direction from the final editable candidate. A supplied template already establishes the direction; do not invent competing candidates.
+- Public Manim skills: one scene proves one concept, storyboard before rendering, preserve component coordinates, use motion only to reveal state change, run a low-quality smoke render before the production render, and inspect the first and final frames.
+- C4/Mermaid architecture skills: keep one abstraction level, use a small directed component graph, and treat the graph as semantic input rather than a finished slide style.
+- HyperFrames/Remotion practices: deterministic frames and proof snapshots are useful. Remotion is optional only; do not vendor it or make it the default because its distribution and licensing boundary differs from the pinned Manim route.
 
 ## Route before authoring
 
@@ -74,7 +77,7 @@ python3 scripts/lab_slides.py init \
 `init` inspects every template slide, writes a hash-pinned profile and design declaration, and copies a native builder scaffold. Then:
 
 1. Fill `deck.communication_job` in `labdeck.json` using: “By the end, [audience] should [outcome] because [central takeaway].”
-2. Fill `content/outline.md`, `content/slide-plan.json`, `content/claims.json`, and `content/notes.json`.
+2. Fill `content/outline.md`, `content/slide-plan.json`, `content/claims.json`, `content/motion-assets.json`, and `content/notes.json`.
 3. Review `content/design-system.json`. Keep the full source theme as provenance, but use only the closed semantic `palette` for generated body objects.
 4. Run `prepare-template`, then `audit`.
 5. Implement the deck-specific native mechanisms in `build/builder.mjs` from the generated scaffold.
@@ -83,9 +86,10 @@ python3 scripts/lab_slides.py init \
 For every new project, `audit` enforces both content and visual contracts. It rejects
 generated copy absent from the bundled English lexicon, sentence-style titles, filler/placeholders, excessive
 visible words, missing text/visual roles, raw or out-of-palette colors, text-led
-anchors, generic UI families, repeated compositions, and a primary figure spanning
-less than 50% or occupying less than 18% of the body zone with information-bearing
-geometry. The contracts cannot be disabled or weakened from `labdeck.json`. These are fail-closed
+anchors, generic UI families, repeated compositions, and figures outside their
+anchor-specific hard size range or below their information-bearing area floor.
+It warns when a figure leaves its preferred band, including when it becomes too
+large. The contracts cannot be disabled or weakened from `labdeck.json`. These are fail-closed
 recurrence guards; full-size visual review still decides whether the figure is
 intuitive and presentation-ready.
 
@@ -125,7 +129,7 @@ For the retained body frame, bounded insertion is restricted to the inherited bo
 
 ## Plan and design declaration
 
-Before layout work, state the internal communication job and choose a narrative arc appropriate to the research question. Every slide advances that arc with one narrative job, one short keyword title, and one dominant figure. Put the full claim in the figure, evidence relationship, or speaker notes—not in the title.
+Before layout work, state the internal communication job and choose a narrative arc appropriate to the research question. Every slide advances that arc with one narrative job, one short keyword title, and one proportionate primary visual. Put the full claim in the figure, evidence relationship, or speaker notes—not in the title.
 
 Every schema-v2 slide-plan entry needs:
 
@@ -254,7 +258,7 @@ For incremental kernels, also record the predecessor, exact changed code line, u
 
 ## Composition and editability
 
-Use one canvas composition, not a component-library interface. Start with the figure and add only the labels needed to read it. Avoid generic card grids, pills, badges, faux navigation, decorative metric strips, repeated icon blurbs, gradients, shadows, section color changes, and ornamental rules. Do not add filler copy, decorative icons, or invented data.
+Use one canvas composition, not a component-library interface. Start with the visual relationship and add only the labels needed to read it. Avoid generic card grids, pills, badges, faux navigation, decorative metric strips, repeated icon blurbs, gradients, shadows, section color changes, and ornamental rules. Do not add filler copy, decorative icons, or invented data.
 
 The inherited template may legitimately use a pattern or Arial typography that a generic anti-slop list would reject. The approved template wins. Judge whether a treatment is source-authentic and meaningful, not whether a font appears on a blacklist.
 
@@ -268,7 +272,58 @@ bound source reference; label-only arrays are not data.
 
 Create connectors before their nodes. Keep technical body text and diagram labels at least 16 pt unless the source template explicitly establishes another readable size. Keep generated copy English; inspect raster figures so embedded non-English labels are translated or replaced. Locked inherited institutional marks are the only routine language exception.
 
-In the generated scaffold, specify native text size as `fontSizePt`. `fontSize` is the Artifact Tool's CSS-pixel unit; the scaffold converts points at 96/72 and enforces `style.minimum_body_pt`. Use semantic color tokens such as `primary`, `focus`, `soft`, and `ink`; raw hex colors are rejected. The scaffold supports bounded `text`, `shape`, and editable `line` primitives and creates line primitives before nodes. Attached connectors, charts, tables, or other advanced authoring requires a project-specific builder and fresh strict fidelity plus dual visual review; there is no unchecked custom callback.
+In the generated scaffold, specify native text size as `fontSizePt`. `fontSize` is the Artifact Tool's CSS-pixel unit; the scaffold converts points at 96/72 and enforces `style.minimum_body_pt`. Use semantic color tokens such as `primary`, `focus`, `soft`, and `ink`; raw hex colors are rejected. The scaffold supports bounded `text`, `shape`, editable `line`, and source-bound PNG/JPEG/GIF `image` elements and creates line primitives before nodes. Attached connectors, charts, tables, or other advanced authoring requires a project-specific builder and fresh strict fidelity plus dual visual review; there is no unchecked custom callback.
+
+## Systems motion
+
+Use motion only when time, concurrency, queueing, ownership, or state transition is materially clearer than a static diagram.
+
+Choose the least complex route that explains the interaction:
+
+1. Static native diagram for fixed topology, hierarchy, comparison, or one final state.
+2. Progressive native slides for two or three discrete states that benefit from editability and universal PowerPoint playback.
+3. Embedded Manim GIF for a short continuous interaction. Keep stable components fixed and move only the request, page, cache line, tensor, or state token.
+4. Companion H.264/AAC MP4 plus a poster in the deck when GIF quality is insufficient. The Artifact Tool does not provide a verified native video-authoring API, so do not mutate OOXML to force an embedded video.
+
+Motion is sparse: at most one clip on a slide, normally no more than 25% of the deck, 3–8 seconds, one focal event, no more than five moving tokens, and at most 8 MB for an embedded GIF. Keep the first and final frames meaningful and supply both as PNG proof/fallback images. Use English keyword labels only; no kinetic typography, subtitles, decorative easing, glow, or unsupported numeric values.
+
+The isolated renderer is pinned to Manim Community `0.20.1` through `uvx`, so a broken global `manim` executable does not control the workflow:
+
+```bash
+python3 scripts/motion_assets.py doctor
+python3 scripts/motion_assets.py render-manim \
+  --project /absolute/path/to/project \
+  --source work/motion/ai_serving_interaction.py \
+  --scene ServingBatchFlow \
+  --asset-id serving-batch \
+  --delivery embedded-gif \
+  --domain ai-serving \
+  --archetype request-flow \
+  --source-ref source-deck \
+  --duration-seconds 5 \
+  --alt "Requests join the live decode batch"
+python3 scripts/motion_assets.py validate --config /absolute/path/to/project/labdeck.json
+```
+
+Register the returned manifest entry in `content/motion-assets.json`. Bind an embedded GIF to exactly one planned image:
+
+```json
+{
+  "type": "image",
+  "name": "serving-batch-motion",
+  "visual_role": "image",
+  "motion_ref": "serving-batch",
+  "asset_path": "assets/motion/serving-batch.gif",
+  "source_ref": "source-deck",
+  "alt": "Requests join the live decode batch",
+  "fit": "contain",
+  "position": {"left": 250, "top": 165, "width": 760, "height": 427.5}
+}
+```
+
+For a companion MP4, the slide image must use its `poster_path`, while the MP4 is delivered beside the PPTX. PowerPoint desktop plays animated GIFs, but PowerPoint for the web does not; the poster and progressive-native fallback are therefore part of the contract, not optional polish.
+
+Use the domain grammar in [motion-and-domain-visuals.md](references/motion-and-domain-visuals.md). The bundled starters cover `SyscallPath` and `ServingBatchFlow`; treat them as restrained semantic scaffolds, not as evidence.
 
 ## Evidence profile
 
@@ -313,7 +368,7 @@ If the user explicitly chooses direct HTML-to-PPTX conversion, label it experime
 Render every slide full-size after material layout, type, color, density, or imagery changes. Run two independent read-only reviews against the current renders:
 
 - Pass A: template fidelity, frame map, locked chrome, closed-palette compliance, English-copy compliance, editability, claim truth, and no unplanned overlays.
-- Pass B: audience comprehension, keyword-title quality, figure-first reading, 3–5 second takeaway, consistent color semantics, label legibility, pacing, and overlap.
+- Pass B: audience comprehension, keyword-title quality, visual-first reading, proportionate figure size, motion fallback clarity, 3–5 second takeaway, consistent color semantics, label legibility, pacing, and overlap.
 
 Critical findings block delivery. Fix Major findings or obtain explicit user acceptance. Track deferred Minor/Note findings in `reports/design-debt.md`. Reviews are stale after any material edit; regenerate renders and both reports. The user-acceptance record is still required for a new project even when Pass A/B are clean; it is the explicit human check against color drift, filler, weak figures, repetition, unjustified whitespace, dense limitations, and title/logo breathing that static gates cannot fully judge.
 
@@ -328,7 +383,10 @@ Deliver one immutable final PPTX, QA report, template-fidelity report, and conci
 - `assets/english-words.txt` and `assets/english-technical-terms.txt`: deterministic English-copy lexicon and research-computing supplement.
 - `assets/english-verbs-wordnet-index.txt`, `assets/english-verbs-wordnet-exceptions.txt`, and `assets/english-nouns-wordnet-exceptions.txt`: Princeton WordNet 3.1 verb lemmas/forms and irregular plurals used to distinguish finite-clause titles from common research keyword endings; the copied index preserves the WordNet license.
 - `assets/template-builder-scaffold.mjs`: native starter import/edit/export spine with bounded element checks.
+- `assets/manim/system_os_interaction.py` and `assets/manim/ai_serving_interaction.py`: quiet starter scenes for OS and AI-serving interactions.
 - `scripts/check_locked_template.py`: strict starter/final comparison for routing, template core, locked objects, mapped rewrites, and bounded native additions.
+- `scripts/motion_assets.py`: pinned Manim smoke/production renderer, GIF/MP4 proof-frame extractor, and motion-manifest validator.
 - `scripts/native_rebuild_manifest.py`: hash-pinned one-way HTML-prototype-to-native boundary.
 - [qa-gates.md](references/qa-gates.md): exact mechanical and dual-review contract.
+- [motion-and-domain-visuals.md](references/motion-and-domain-visuals.md): static/progressive/GIF/video routing and systems/OS/AI-serving visual grammar.
 - [slides-grab-adaptation.md](references/slides-grab-adaptation.md): retained orchestration ideas and the HTML boundary.

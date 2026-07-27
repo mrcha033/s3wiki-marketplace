@@ -35,30 +35,30 @@ def slide(number: int, family: str = "process-flow", *, basis: object = None, un
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "diagram-node",
-                "position": {"x": 10, "y": 10, "w": 25, "h": 80},
+                "position": {"left": 15, "top": 20, "width": 22, "height": 60},
             },
             {
                 "type": "line",
                 "visual_role": "connector",
-                "position": {"x": 35, "y": 45, "w": 30, "h": 10},
+                "position": {"left": 37, "top": 45, "width": 26, "height": 10},
             },
             {
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "diagram-node",
-                "position": {"x": 65, "y": 10, "w": 25, "h": 80},
+                "position": {"left": 63, "top": 20, "width": 22, "height": 60},
             },
             {
                 "type": "text",
                 "text_role": "figure-label",
                 "text": "Input",
-                "position": {"x": 12, "y": 40, "w": 20, "h": 10},
+                "position": {"left": 16, "top": 43, "width": 20, "height": 10},
             },
             {
                 "type": "text",
                 "text_role": "figure-label",
                 "text": "Output",
-                "position": {"x": 68, "y": 40, "w": 20, "h": 10},
+                "position": {"left": 64, "top": 43, "width": 20, "height": 10},
             },
         ],
     }
@@ -96,8 +96,53 @@ class VisualContractTests(unittest.TestCase):
             self.config, {"slides": [slide(1)]}, frame_map(1)
         )
         self.assertEqual(report["status"], "pass", report)
-        self.assertGreaterEqual(report["checks"][0]["body_coverage_ratio"], 0.16)
-        self.assertGreaterEqual(report["checks"][0]["figure_area_ratio"], 0.18)
+        self.assertEqual(report["checks"][0]["figure_budget_profile"], "interaction")
+        self.assertAlmostEqual(report["checks"][0]["figure_bbox_area_ratio"], 0.42)
+        self.assertGreaterEqual(report["checks"][0]["information_area_ratio"], 0.08)
+
+    def test_native_positions_use_the_production_builder_schema(self) -> None:
+        entry = slide(1)
+        entry["native_elements"][0]["position"] = {"x": 15, "y": 20, "w": 22, "h": 60}
+        report = lab_slides.visual_contract_audit(
+            self.config, {"slides": [entry]}, frame_map(1)
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(
+            any("left/top/width/height" in error for error in report["errors"]),
+            report,
+        )
+
+    def test_profile_budget_warns_before_hard_maximum(self) -> None:
+        entry = slide(1)
+        entry["native_elements"][0]["position"] = {"left": 15, "top": 15, "width": 25, "height": 70}
+        entry["native_elements"][1]["position"] = {"left": 40, "top": 45, "width": 20, "height": 10}
+        entry["native_elements"][2]["position"] = {"left": 60, "top": 15, "width": 25, "height": 70}
+        report = lab_slides.visual_contract_audit(
+            self.config, {"slides": [entry]}, frame_map(1)
+        )
+        self.assertEqual(report["status"], "pass", report)
+        self.assertTrue(any("above the interaction preferred band" in item for item in report["warnings"]))
+
+    def test_profile_budget_rejects_oversized_figure(self) -> None:
+        entry = slide(1)
+        entry["native_elements"][0]["position"] = {"left": 5, "top": 5, "width": 30, "height": 90}
+        entry["native_elements"][1]["position"] = {"left": 35, "top": 45, "width": 30, "height": 10}
+        entry["native_elements"][2]["position"] = {"left": 65, "top": 5, "width": 30, "height": 90}
+        report = lab_slides.visual_contract_audit(
+            self.config, {"slides": [entry]}, frame_map(1)
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(any("above the interaction hard maximum" in item for item in report["errors"]))
+
+    def test_spoofed_closing_role_cannot_bypass_add_zone_figure_gate(self) -> None:
+        entry = slide(1)
+        entry["template_frame"]["role"] = "closing"
+        entry["native_elements"] = []
+        report = lab_slides.visual_contract_audit(
+            self.config, {"slides": [entry]}, frame_map(1)
+        )
+        self.assertEqual(report["status"], "fail", report)
+        self.assertTrue(any("hard minimum" in item for item in report["errors"]))
 
     def test_missing_anchor_and_basis_fail(self) -> None:
         entry = slide(1, basis=[])
@@ -125,7 +170,7 @@ class VisualContractTests(unittest.TestCase):
         sparse["native_elements"] = []
         report = lab_slides.visual_contract_audit(self.config, {"slides": [sparse]}, frame_map(1))
         self.assertEqual(report["status"], "fail")
-        self.assertTrue(any("underfill_rationale" in error for error in report["errors"]))
+        self.assertTrue(any("hard minimum" in error for error in report["errors"]))
         sparse["visual_contract"]["allow_underfill"] = True
         sparse["visual_contract"]["underfill_rationale"] = "Intentional sparse transition with one evidence anchor."
         sparse["visual_contract"]["allow_figure_exception"] = True
@@ -142,12 +187,12 @@ class VisualContractTests(unittest.TestCase):
                 "type": "text",
                 "text_role": "callout",
                 "text": "Large text is not a figure",
-                "position": {"x": 5, "y": 5, "w": 90, "h": 90},
+                "position": {"left": 5, "top": 5, "width": 90, "height": 90},
             }
         ]
         report = lab_slides.visual_contract_audit(self.config, {"slides": [entry]}, frame_map(1))
         self.assertEqual(report["status"], "fail")
-        self.assertTrue(any("primary-figure span" in error for error in report["errors"]))
+        self.assertTrue(any("primary-figure bbox area" in error for error in report["errors"]))
 
     def test_raw_hex_and_unknown_colors_are_rejected(self) -> None:
         entry = slide(1)
@@ -198,7 +243,7 @@ class VisualContractTests(unittest.TestCase):
             "type": "shape",
             "geometry": "rect",
             "visual_role": "connector",
-            "position": {"x": 35, "y": 45, "w": 30, "h": 10},
+            "position": {"left": 35, "top": 45, "width": 30, "height": 10},
         }
         report = lab_slides.visual_contract_audit(
             self.config,
@@ -219,7 +264,7 @@ class VisualContractTests(unittest.TestCase):
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "plot",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             }
         ]
         report = lab_slides.visual_contract_audit(
@@ -238,7 +283,7 @@ class VisualContractTests(unittest.TestCase):
                 "type": "chart",
                 "visual_role": "plot",
                 "series": "x",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             }
         ]
         report = lab_slides.visual_contract_audit(
@@ -261,7 +306,7 @@ class VisualContractTests(unittest.TestCase):
                     "type": "chart",
                     "visual_role": "plot",
                     "series": series,
-                    "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                    "position": {"left": 0, "top": 0, "width": 100, "height": 100},
                 }
             ]
             report = lab_slides.visual_contract_audit(
@@ -283,7 +328,7 @@ class VisualContractTests(unittest.TestCase):
                 "type": "chart",
                 "visual_role": "plot",
                 "series": [1, 2],
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 20, "top": 25, "width": 60, "height": 50},
             }
         ]
         report = lab_slides.visual_contract_audit(
@@ -300,7 +345,7 @@ class VisualContractTests(unittest.TestCase):
             {
                 "type": "code",
                 "visual_role": "code",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             }
         ]
         report = lab_slides.visual_contract_audit(
@@ -321,24 +366,24 @@ class VisualContractTests(unittest.TestCase):
             {
                 "type": "line",
                 "visual_role": "axis",
-                "position": {"x": 10, "y": 10, "w": 2, "h": 80},
+                "position": {"left": 20, "top": 20, "width": 2, "height": 60},
             },
             {
                 "type": "line",
                 "visual_role": "axis",
-                "position": {"x": 10, "y": 88, "w": 80, "h": 2},
+                "position": {"left": 20, "top": 78, "width": 60, "height": 2},
             },
             {
                 "type": "shape",
                 "visual_role": "data-mark",
                 "value": 4,
-                "position": {"x": 20, "y": 60, "w": 25, "h": 28},
+                "position": {"left": 30, "top": 55, "width": 18, "height": 23},
             },
             {
                 "type": "shape",
                 "visual_role": "data-mark",
                 "value": 9,
-                "position": {"x": 55, "y": 25, "w": 25, "h": 63},
+                "position": {"left": 57, "top": 35, "width": 18, "height": 43},
             },
         ]
         report = lab_slides.visual_contract_audit(
@@ -356,31 +401,31 @@ class VisualContractTests(unittest.TestCase):
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "boundary",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             },
             {
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "axis",
-                "position": {"x": 1, "y": 1, "w": 1, "h": 1},
+                "position": {"left": 1, "top": 1, "width": 1, "height": 1},
             },
             {
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "axis",
-                "position": {"x": 2, "y": 2, "w": 1, "h": 1},
+                "position": {"left": 2, "top": 2, "width": 1, "height": 1},
             },
             {
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "data-mark",
-                "position": {"x": 3, "y": 3, "w": 1, "h": 1},
+                "position": {"left": 3, "top": 3, "width": 1, "height": 1},
             },
             {
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "data-mark",
-                "position": {"x": 4, "y": 4, "w": 1, "h": 1},
+                "position": {"left": 4, "top": 4, "width": 1, "height": 1},
             },
         ]
         report = lab_slides.visual_contract_audit(
@@ -393,8 +438,8 @@ class VisualContractTests(unittest.TestCase):
             any("data-backed chart" in error for error in report["errors"]),
             report,
         )
-        self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
-        self.assertLess(report["checks"][0]["figure_span_ratio"], 0.01)
+        self.assertLess(report["checks"][0]["information_area_ratio"], 0.01)
+        self.assertLess(report["checks"][0]["figure_bbox_area_ratio"], 0.01)
 
     def test_unrelated_full_zone_role_cannot_inflate_plot_metrics(self) -> None:
         for unrelated in (
@@ -402,13 +447,13 @@ class VisualContractTests(unittest.TestCase):
                 "type": "shape",
                 "geometry": "rect",
                 "visual_role": "diagram-node",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             },
             {
                 "type": "code",
                 "visual_role": "code",
                 "code": "x = 1",
-                "position": {"x": 0, "y": 0, "w": 100, "h": 100},
+                "position": {"left": 0, "top": 0, "width": 100, "height": 100},
             },
         ):
             entry = slide(1)
@@ -418,24 +463,24 @@ class VisualContractTests(unittest.TestCase):
                 {
                     "type": "line",
                     "visual_role": "axis",
-                    "position": {"x": 10, "y": 10, "w": 1, "h": 10},
+                    "position": {"left": 10, "top": 10, "width": 1, "height": 10},
                 },
                 {
                     "type": "line",
                     "visual_role": "axis",
-                    "position": {"x": 10, "y": 19, "w": 10, "h": 1},
+                    "position": {"left": 10, "top": 19, "width": 10, "height": 1},
                 },
                 {
                     "type": "shape",
                     "visual_role": "data-mark",
                     "value": 1,
-                    "position": {"x": 12, "y": 17, "w": 1, "h": 1},
+                    "position": {"left": 12, "top": 17, "width": 1, "height": 1},
                 },
                 {
                     "type": "shape",
                     "visual_role": "data-mark",
                     "value": 2,
-                    "position": {"x": 17, "y": 13, "w": 1, "h": 1},
+                    "position": {"left": 17, "top": 13, "width": 1, "height": 1},
                 },
             ]
             report = lab_slides.visual_contract_audit(
@@ -444,8 +489,8 @@ class VisualContractTests(unittest.TestCase):
                 frame_map(1),
             )
             self.assertEqual(report["status"], "fail", report)
-            self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
-            self.assertLess(report["checks"][0]["figure_span_ratio"], 0.05)
+            self.assertLess(report["checks"][0]["information_area_ratio"], 0.01)
+            self.assertLess(report["checks"][0]["figure_bbox_area_ratio"], 0.05)
             self.assertNotIn(
                 unrelated["visual_role"],
                 report["checks"][0]["figure_roles"],
@@ -479,17 +524,17 @@ class VisualContractTests(unittest.TestCase):
                 "type": "text",
                 "text_role": "annotation",
                 "text": "Large prose rectangle",
-                "position": {"x": 10, "y": 10, "w": 80, "h": 80},
+                "position": {"left": 10, "top": 10, "width": 80, "height": 80},
             },
             {
                 "type": "shape",
                 "visual_role": "data-mark",
-                "position": {"x": 1, "y": 1, "w": 1, "h": 1},
+                "position": {"left": 1, "top": 1, "width": 1, "height": 1},
             },
             {
                 "type": "shape",
                 "visual_role": "data-mark",
-                "position": {"x": 98, "y": 98, "w": 1, "h": 1},
+                "position": {"left": 98, "top": 98, "width": 1, "height": 1},
             },
         ]
         report = lab_slides.visual_contract_audit(
@@ -498,8 +543,8 @@ class VisualContractTests(unittest.TestCase):
             frame_map(1),
         )
         self.assertEqual(report["status"], "fail")
-        self.assertTrue(any("primary-figure area" in error for error in report["errors"]))
-        self.assertLess(report["checks"][0]["figure_area_ratio"], 0.01)
+        self.assertTrue(any("information-bearing area" in error for error in report["errors"]))
+        self.assertLess(report["checks"][0]["information_area_ratio"], 0.01)
 
     def test_visual_contract_cannot_be_removed_or_disabled(self) -> None:
         missing = {"schema_version": 2, "qa": {}}
@@ -530,7 +575,9 @@ class VisualContractTests(unittest.TestCase):
     def test_visual_contract_settings_are_pinned(self) -> None:
         weakened = json.loads(json.dumps(self.config))
         weakened["qa"]["visual_contract"]["require_primary_figure"] = False
-        weakened["qa"]["visual_contract"]["min_figure_span_ratio"] = 0
+        weakened["qa"]["visual_contract"]["figure_budget_profiles"]["interaction"][
+            "hard_bbox_area_ratio"
+        ] = [0, 1]
         weakened["qa"]["visual_contract"]["allowed_anchor_types"].append("rectangle")
         report = lab_slides.visual_contract_audit(
             weakened,

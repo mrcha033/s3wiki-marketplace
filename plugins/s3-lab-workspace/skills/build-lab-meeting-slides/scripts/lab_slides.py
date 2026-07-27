@@ -101,9 +101,71 @@ DEFAULT_CONTENT_CONTRACT = {
 DEFAULT_VISUAL_CONTRACT = {
     "enabled": True,
     "max_repeated_composition": 2,
-    "min_body_coverage_ratio": 0.16,
-    "min_figure_span_ratio": 0.50,
-    "min_figure_area_ratio": 0.18,
+    "figure_budget_profiles": {
+        "context": {
+            "preferred_bbox_area_ratio": [0.18, 0.30],
+            "hard_bbox_area_ratio": [0.12, 0.40],
+            "min_information_area_ratio": 0.03,
+        },
+        "architecture": {
+            "preferred_bbox_area_ratio": [0.26, 0.40],
+            "hard_bbox_area_ratio": [0.18, 0.50],
+            "min_information_area_ratio": 0.05,
+        },
+        "interaction": {
+            "preferred_bbox_area_ratio": [0.28, 0.42],
+            "hard_bbox_area_ratio": [0.20, 0.52],
+            "min_information_area_ratio": 0.06,
+        },
+        "evidence": {
+            "preferred_bbox_area_ratio": [0.24, 0.38],
+            "hard_bbox_area_ratio": [0.16, 0.48],
+            "min_information_area_ratio": 0.05,
+        },
+        "code": {
+            "preferred_bbox_area_ratio": [0.22, 0.34],
+            "hard_bbox_area_ratio": [0.14, 0.44],
+            "min_information_area_ratio": 0.04,
+        },
+        "media": {
+            "preferred_bbox_area_ratio": [0.28, 0.42],
+            "hard_bbox_area_ratio": [0.20, 0.50],
+            "min_information_area_ratio": 0.08,
+        },
+    },
+    "anchor_profile_map": {
+        "context": "context",
+        "roadmap": "context",
+        "timeline": "context",
+        "architecture": "architecture",
+        "system": "architecture",
+        "flow": "interaction",
+        "mechanism": "interaction",
+        "pipeline": "interaction",
+        "process": "interaction",
+        "bar": "evidence",
+        "before-after": "evidence",
+        "chart": "evidence",
+        "comparison": "evidence",
+        "evidence": "evidence",
+        "figure": "evidence",
+        "graph": "evidence",
+        "line": "evidence",
+        "matrix": "evidence",
+        "plot": "evidence",
+        "result": "evidence",
+        "scatter": "evidence",
+        "table": "evidence",
+        "trend": "evidence",
+        "two-state": "evidence",
+        "code": "code",
+        "code-delta": "code",
+        "image": "media",
+        "micrograph": "media",
+        "paper-figure": "media",
+        "photo": "media",
+        "screenshot": "media",
+    },
     "require_anchor_spec": True,
     "require_content_basis": True,
     "require_primary_figure": True,
@@ -122,11 +184,14 @@ DEFAULT_VISUAL_CONTRACT = {
     ],
     "diagram_anchor_types": [
         "architecture",
+        "context",
         "flow",
         "mechanism",
         "pipeline",
         "process",
+        "roadmap",
         "system",
+        "timeline",
     ],
     "allowed_anchor_types": [
         "architecture",
@@ -136,6 +201,7 @@ DEFAULT_VISUAL_CONTRACT = {
         "code",
         "code-delta",
         "comparison",
+        "context",
         "evidence",
         "figure",
         "flow",
@@ -151,10 +217,12 @@ DEFAULT_VISUAL_CONTRACT = {
         "plot",
         "process",
         "result",
+        "roadmap",
         "scatter",
         "screenshot",
         "system",
         "table",
+        "timeline",
         "trend",
         "two-state",
     ],
@@ -164,6 +232,66 @@ DEFAULT_VISUAL_CONTRACT = {
     "forbidden_anchor_types": ["text", "prose", "paragraph", "bullet-list", "quote"],
     "forbidden_families": ["card-grid", "dashboard", "icon-grid", "pill-grid", "tile-grid"],
     "require_palette_tokens": True,
+}
+DEFAULT_MOTION_CONTRACT = {
+    "enabled": True,
+    "manifest": "content/motion-assets.json",
+    "manim_version": "0.20.1",
+    "max_motion_slide_ratio": 0.25,
+    "max_clips_per_slide": 1,
+    "min_duration_seconds": 3.0,
+    "max_duration_seconds": 8.0,
+    "max_embedded_gif_bytes": 8_000_000,
+    "max_companion_mp4_bytes": 100_000_000,
+    "allowed_deliveries": ["embedded-gif", "companion-mp4"],
+    "allowed_engines": ["manim", "remotion"],
+    "allowed_domains": ["systems", "os", "ai-serving"],
+    "allowed_archetypes": [
+        "request-flow",
+        "prefill-decode",
+        "parallel-lanes",
+        "syscall-path",
+        "scheduler-state",
+        "memory-path",
+        "trace-waterfall",
+        "flamegraph-zoom",
+        "kv-cache",
+        "backpressure",
+        "speculative-decode",
+    ],
+    "domain_archetypes": {
+        "systems": [
+            "request-flow",
+            "parallel-lanes",
+            "scheduler-state",
+            "memory-path",
+            "trace-waterfall",
+            "flamegraph-zoom",
+        ],
+        "os": [
+            "parallel-lanes",
+            "syscall-path",
+            "scheduler-state",
+            "memory-path",
+            "trace-waterfall",
+            "flamegraph-zoom",
+        ],
+        "ai-serving": [
+            "request-flow",
+            "prefill-decode",
+            "parallel-lanes",
+            "scheduler-state",
+            "trace-waterfall",
+            "flamegraph-zoom",
+            "kv-cache",
+            "backpressure",
+            "speculative-decode",
+        ],
+    },
+    "require_poster": True,
+    "require_end_state": True,
+    "require_static_fallback": True,
+    "require_source_refs": True,
 }
 NON_ENGLISH_SCRIPT_RE = re.compile(
     "["
@@ -536,6 +664,19 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def template_profile_integrity_errors(
+    config: dict[str, Any],
+    profile_path: Path,
+) -> list[str]:
+    expected = str(template_config(config).get("profile_sha256", "")).strip().casefold()
+    if not profile_path.is_file():
+        return [f"missing template profile: {profile_path}; run prepare-template"]
+    actual = sha256_file(profile_path)
+    if not expected or expected != actual:
+        return ["template profile hash changed or is stale; rerun prepare-template"]
+    return []
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -1734,11 +1875,11 @@ def _figure_metrics(
     top = min(rect[1] for rect in span_rects)
     right = max(rect[0] + rect[2] for rect in span_rects)
     bottom = max(rect[1] + rect[3] for rect in span_rects)
-    span = max(0.0, right - left) * max(0.0, bottom - top)
+    bbox_area = max(0.0, right - left) * max(0.0, bottom - top)
     zone_area = zone[2] * zone[3]
     if zone_area <= 0:
         return None, None, roles
-    return span / zone_area, _visual_union_area(area_rects) / zone_area, roles
+    return bbox_area / zone_area, _visual_union_area(area_rects) / zone_area, roles
 
 
 def _structured_visual_point_count(value: Any) -> int:
@@ -2130,6 +2271,706 @@ def _pinned_contract_errors(
     return errors
 
 
+def _project_bound_path(
+    project: Path,
+    raw_path: Any,
+    label: str,
+    errors: list[str],
+) -> Path | None:
+    value = str(raw_path or "").strip()
+    if not value:
+        errors.append(f"{label} is required")
+        return None
+    candidate = Path(value)
+    if candidate.is_absolute():
+        errors.append(f"{label} must be project-relative")
+        return None
+    resolved = (project / candidate).resolve()
+    try:
+        resolved.relative_to(project.resolve())
+    except ValueError:
+        errors.append(f"{label} escapes the deck project")
+        return None
+    return resolved
+
+
+def gif_metadata(path: Path) -> dict[str, Any]:
+    """Read GIF size, frame delays, and loop metadata without third-party packages."""
+    data = path.read_bytes()
+    if len(data) < 13 or data[:6] not in {b"GIF87a", b"GIF89a"}:
+        raise ValueError("not a GIF87a/GIF89a asset")
+    width = int.from_bytes(data[6:8], "little")
+    height = int.from_bytes(data[8:10], "little")
+    packed = data[10]
+    offset = 13
+    if packed & 0x80:
+        offset += 3 * (2 ** ((packed & 0x07) + 1))
+
+    def read_subblocks(start: int) -> tuple[int, bytes]:
+        cursor = start
+        payload = bytearray()
+        while cursor < len(data):
+            size = data[cursor]
+            cursor += 1
+            if size == 0:
+                return cursor, bytes(payload)
+            if cursor + size > len(data):
+                raise ValueError("truncated GIF data block")
+            payload.extend(data[cursor : cursor + size])
+            cursor += size
+        raise ValueError("unterminated GIF data block")
+
+    frames = 0
+    duration_hundredths = 0
+    pending_delay = 0
+    loop_count: int | None = None
+    while offset < len(data):
+        marker = data[offset]
+        offset += 1
+        if marker == 0x3B:
+            break
+        if marker == 0x21:
+            if offset >= len(data):
+                raise ValueError("truncated GIF extension")
+            extension_label = data[offset]
+            offset += 1
+            if extension_label == 0xF9:
+                if offset + 6 > len(data) or data[offset] != 4:
+                    raise ValueError("invalid GIF graphics-control extension")
+                pending_delay = int.from_bytes(data[offset + 2 : offset + 4], "little")
+                if data[offset + 5] != 0:
+                    raise ValueError("unterminated GIF graphics-control extension")
+                offset += 6
+                continue
+            if extension_label == 0xFF:
+                if offset >= len(data):
+                    raise ValueError("truncated GIF application extension")
+                identifier_size = data[offset]
+                offset += 1
+                if offset + identifier_size > len(data):
+                    raise ValueError("truncated GIF application identifier")
+                identifier = data[offset : offset + identifier_size]
+                offset += identifier_size
+                offset, payload = read_subblocks(offset)
+                if (
+                    identifier in {b"NETSCAPE2.0", b"ANIMEXTS1.0"}
+                    and len(payload) >= 3
+                    and payload[0] == 1
+                ):
+                    loop_count = int.from_bytes(payload[1:3], "little")
+                continue
+            offset, _ = read_subblocks(offset)
+            continue
+        if marker != 0x2C:
+            raise ValueError(f"unexpected GIF block marker 0x{marker:02x}")
+        if offset + 9 > len(data):
+            raise ValueError("truncated GIF image descriptor")
+        image_packed = data[offset + 8]
+        offset += 9
+        if image_packed & 0x80:
+            offset += 3 * (2 ** ((image_packed & 0x07) + 1))
+        if offset >= len(data):
+            raise ValueError("truncated GIF image data")
+        offset += 1
+        offset, _ = read_subblocks(offset)
+        frames += 1
+        duration_hundredths += pending_delay
+        pending_delay = 0
+    if width <= 0 or height <= 0 or frames <= 0:
+        raise ValueError("GIF has invalid dimensions or no frames")
+    return {
+        "width": width,
+        "height": height,
+        "frames": frames,
+        "duration_seconds": duration_hundredths / 100.0,
+        "loop_count": loop_count,
+    }
+
+
+def gif_dimensions_and_frames(path: Path) -> tuple[int, int, int]:
+    metadata = gif_metadata(path)
+    return int(metadata["width"]), int(metadata["height"]), int(metadata["frames"])
+
+
+def png_dimensions(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    if (
+        len(data) < 24
+        or data[:8] != b"\x89PNG\r\n\x1a\n"
+        or data[12:16] != b"IHDR"
+    ):
+        raise ValueError("not a PNG with an IHDR header")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    if width <= 0 or height <= 0:
+        raise ValueError("PNG has invalid dimensions")
+    return width, height
+
+
+def _png_decode_error(path: Path) -> str | None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return "ffmpeg is unavailable; proof PNG decodability was not verified"
+    result = subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-frames:v",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return (
+            result.stderr or result.stdout or "ffmpeg rejected the proof PNG"
+        ).strip()
+    return None
+
+
+def _ffprobe_video(path: Path) -> tuple[list[dict[str, Any]], str | None]:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return [], "ffprobe is unavailable; H.264/AAC compatibility was not verified"
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,codec_name,width,height",
+            "-of",
+            "json",
+            str(path),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return [], f"ffprobe rejected the media asset: {(result.stderr or result.stdout).strip()}"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return [], "ffprobe emitted invalid JSON"
+    streams = payload.get("streams")
+    return (streams if isinstance(streams, list) else []), None
+
+
+def _ffprobe_duration(path: Path) -> tuple[float | None, str | None]:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None, "ffprobe is unavailable; actual media duration was not verified"
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return None, f"ffprobe rejected the media duration: {(result.stderr or result.stdout).strip()}"
+    try:
+        duration = float(json.loads(result.stdout).get("format", {}).get("duration"))
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return None, "ffprobe emitted an invalid media duration"
+    if not math.isfinite(duration) or duration <= 0:
+        return None, "ffprobe emitted a non-positive media duration"
+    return duration, None
+
+
+def _motion_color_profile(
+    path: Path,
+    palette: dict[str, str],
+) -> tuple[dict[str, Any], str | None]:
+    """Sample decoded frames and reject chroma outside blends of the closed palette."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return {}, "ffmpeg is unavailable; motion palette fidelity was not verified"
+    colors: list[tuple[float, float, float]] = []
+    for token in ACTIVE_PALETTE_TOKENS:
+        normalized = normalize_hex_color(palette.get(token))
+        if normalized is None:
+            return {}, f"active palette token {token!r} is invalid"
+        colors.append(
+            tuple(float(int(normalized[index : index + 2], 16)) for index in (1, 3, 5))
+        )
+    result = subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-t",
+            "8.1",
+            "-vf",
+            "fps=3,scale=128:72:flags=neighbor",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "pipe:1",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        diagnostic = result.stderr.decode("utf-8", errors="replace").strip()
+        return {}, f"ffmpeg could not decode motion colors: {diagnostic}"
+    raw = result.stdout
+    if not raw or len(raw) % 3:
+        return {}, "ffmpeg emitted invalid RGB motion samples"
+
+    def distance_sq_to_segment(
+        point: tuple[float, float, float],
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+    ) -> float:
+        vector = tuple(end[index] - start[index] for index in range(3))
+        denominator = sum(value * value for value in vector)
+        if denominator == 0:
+            return sum((point[index] - start[index]) ** 2 for index in range(3))
+        projection = sum(
+            (point[index] - start[index]) * vector[index] for index in range(3)
+        ) / denominator
+        projection = min(1.0, max(0.0, projection))
+        return sum(
+            (
+                point[index]
+                - (start[index] + projection * vector[index])
+            )
+            ** 2
+            for index in range(3)
+        )
+
+    segments = [
+        (start, end)
+        for start_index, start in enumerate(colors)
+        for end in colors[start_index:]
+    ]
+    tolerance_sq = 36.0**2
+    off_palette = 0
+    total = len(raw) // 3
+    for offset in range(0, len(raw), 3):
+        point = (float(raw[offset]), float(raw[offset + 1]), float(raw[offset + 2]))
+        if min(distance_sq_to_segment(point, start, end) for start, end in segments) > tolerance_sq:
+            off_palette += 1
+    ratio = off_palette / total
+    return {
+        "sampled_pixels": total,
+        "off_palette_pixels": off_palette,
+        "off_palette_ratio": round(ratio, 6),
+        "tolerance_rgb": 36,
+    }, None
+
+
+def motion_contract_audit(
+    config: dict[str, Any],
+    plan: dict[str, Any],
+    project: Path,
+) -> dict[str, Any]:
+    """Validate optional, source-bound system motion and its static fallbacks."""
+    configured = config.get("qa", {}).get("motion_contract")
+    if not isinstance(configured, dict):
+        if config.get("schema_version") == 2:
+            return {
+                "status": "fail",
+                "checks": [],
+                "errors": ["qa.motion_contract is required for schema_version 2"],
+                "warnings": [],
+            }
+        return {
+            "status": "legacy-warning",
+            "checks": [],
+            "errors": [],
+            "warnings": ["motion contract is absent; rerun init before adding GIF or video assets"],
+        }
+    if configured.get("enabled") is False:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": ["qa.motion_contract may not be disabled"],
+            "warnings": [],
+        }
+    pinned_errors = _pinned_contract_errors(
+        configured,
+        DEFAULT_MOTION_CONTRACT,
+        "qa.motion_contract",
+    )
+    if pinned_errors:
+        return {"status": "fail", "checks": [], "errors": pinned_errors, "warnings": []}
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+    manifest_path = _project_bound_path(
+        project,
+        configured.get("manifest"),
+        "qa.motion_contract.manifest",
+        errors,
+    )
+    if manifest_path is None or not manifest_path.exists():
+        if manifest_path is not None:
+            errors.append(f"motion manifest is missing: {manifest_path}")
+        return {"status": "fail", "checks": [], "errors": errors, "warnings": warnings}
+    try:
+        manifest = read_json(manifest_path)
+    except (OSError, json.JSONDecodeError) as error:
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": [f"motion manifest could not be read: {error}"],
+            "warnings": [],
+        }
+    if manifest.get("schema_version") != 1:
+        errors.append("motion manifest schema_version must be 1")
+    raw_assets = manifest.get("assets")
+    if not isinstance(raw_assets, list):
+        errors.append("motion manifest assets must be an array")
+        raw_assets = []
+
+    allowed_deliveries = set(configured["allowed_deliveries"])
+    allowed_engines = set(configured["allowed_engines"])
+    allowed_domains = set(configured["allowed_domains"])
+    allowed_archetypes = set(configured["allowed_archetypes"])
+    domain_archetypes = {
+        str(domain).strip().casefold(): {
+            str(archetype).strip().casefold()
+            for archetype in raw_archetypes
+            if str(archetype).strip()
+        }
+        for domain, raw_archetypes in configured["domain_archetypes"].items()
+        if isinstance(raw_archetypes, list)
+    }
+    active_palette = configured_active_palette(config)
+    source_ids = {
+        str(item.get("id", "")).strip()
+        for item in config.get("sources", [])
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    }
+    assets_by_id: dict[str, dict[str, Any]] = {}
+    for index, raw_asset in enumerate(raw_assets):
+        label = f"motion assets[{index}]"
+        if not isinstance(raw_asset, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        asset_id = str(raw_asset.get("id", "")).strip()
+        if not asset_id:
+            errors.append(f"{label}.id is required")
+            continue
+        if asset_id in assets_by_id:
+            errors.append(f"duplicate motion asset id: {asset_id}")
+            continue
+        assets_by_id[asset_id] = raw_asset
+        engine = str(raw_asset.get("engine", "")).strip().casefold()
+        delivery = str(raw_asset.get("delivery", "")).strip().casefold()
+        domain = str(raw_asset.get("domain", "")).strip().casefold()
+        archetype = str(raw_asset.get("archetype", "")).strip().casefold()
+        if engine not in allowed_engines:
+            errors.append(f"{label}.engine must be one of {sorted(allowed_engines)}")
+        if delivery not in allowed_deliveries:
+            errors.append(f"{label}.delivery must be one of {sorted(allowed_deliveries)}")
+        if domain not in allowed_domains:
+            errors.append(f"{label}.domain must be one of {sorted(allowed_domains)}")
+        if archetype not in allowed_archetypes:
+            errors.append(f"{label}.archetype must be one of {sorted(allowed_archetypes)}")
+        elif domain in domain_archetypes and archetype not in domain_archetypes[domain]:
+            errors.append(
+                f"{label}.archetype {archetype!r} is not valid for domain {domain!r}; "
+                f"use one of {sorted(domain_archetypes[domain])}"
+            )
+        try:
+            duration = float(raw_asset.get("duration_seconds"))
+        except (TypeError, ValueError):
+            duration = math.nan
+        if not (
+            math.isfinite(duration)
+            and float(configured["min_duration_seconds"])
+            <= duration
+            <= float(configured["max_duration_seconds"])
+        ):
+            errors.append(
+                f"{label}.duration_seconds must be between "
+                f"{configured['min_duration_seconds']} and {configured['max_duration_seconds']}"
+            )
+        source_refs = raw_asset.get("source_refs")
+        if not isinstance(source_refs, list) or not source_refs:
+            errors.append(f"{label}.source_refs must contain at least one supplied source ID")
+            source_refs = []
+        normalized_source_refs = [str(value).strip() for value in source_refs]
+        if any(not value for value in normalized_source_refs):
+            errors.append(f"{label}.source_refs may not contain blank IDs")
+        unknown_sources = sorted(
+            {value for value in normalized_source_refs if value} - source_ids
+        )
+        if unknown_sources:
+            errors.append(f"{label}.source_refs contains unknown IDs: {', '.join(unknown_sources)}")
+        alt = str(raw_asset.get("alt", "")).strip()
+        if not alt or english_copy_issues(alt):
+            errors.append(f"{label}.alt must be concise English alternative text")
+        fallback = str(raw_asset.get("static_fallback", "")).strip().casefold()
+        if fallback not in {"poster", "progressive-native"}:
+            errors.append(f"{label}.static_fallback must be poster or progressive-native")
+
+        media_path = _project_bound_path(
+            project, raw_asset.get("media_path"), f"{label}.media_path", errors
+        )
+        poster_path = _project_bound_path(
+            project, raw_asset.get("poster_path"), f"{label}.poster_path", errors
+        )
+        end_state_path = _project_bound_path(
+            project, raw_asset.get("end_state_path"), f"{label}.end_state_path", errors
+        )
+        source_path = _project_bound_path(
+            project, raw_asset.get("source_path"), f"{label}.source_path", errors
+        )
+        if poster_path is not None and poster_path.suffix.casefold() != ".png":
+            errors.append(f"{label}.poster_path must end in .png")
+        if end_state_path is not None and end_state_path.suffix.casefold() != ".png":
+            errors.append(f"{label}.end_state_path must end in .png")
+        if engine == "manim" and source_path is not None and source_path.suffix.casefold() != ".py":
+            errors.append(f"{label}.source_path must be a Python scene for engine manim")
+        if delivery == "embedded-gif" and raw_asset.get("loop") is not True:
+            errors.append(f"{label}.loop must be true for embedded-gif")
+        for field_name, field_path in (
+            ("media_path", media_path),
+            ("poster_path", poster_path),
+            ("end_state_path", end_state_path),
+            ("source_path", source_path),
+        ):
+            if field_path is not None and not field_path.is_file():
+                errors.append(f"{label}.{field_name} does not exist: {field_path}")
+        media_check: dict[str, Any] = {}
+        media_dimensions: tuple[int, int] | None = None
+        actual_duration: float | None = None
+        if media_path is not None and media_path.is_file():
+            if delivery == "embedded-gif":
+                if media_path.stat().st_size > int(configured["max_embedded_gif_bytes"]):
+                    errors.append(
+                        f"{label} embedded GIF exceeds "
+                        f"{int(configured['max_embedded_gif_bytes'])} bytes"
+                    )
+                if media_path.suffix.casefold() != ".gif":
+                    errors.append(f"{label}.media_path must end in .gif for embedded-gif")
+                else:
+                    try:
+                        metadata = gif_metadata(media_path)
+                        width = int(metadata["width"])
+                        height = int(metadata["height"])
+                        frames = int(metadata["frames"])
+                        media_dimensions = (width, height)
+                        actual_duration = float(metadata["duration_seconds"])
+                        media_check = dict(metadata)
+                        if frames < 2:
+                            errors.append(f"{label} embedded GIF must contain at least two frames")
+                        if metadata["loop_count"] != 0:
+                            errors.append(
+                                f"{label} embedded GIF must contain an infinite loop extension"
+                            )
+                    except (OSError, ValueError) as error:
+                        errors.append(f"{label} invalid GIF: {error}")
+            elif delivery == "companion-mp4":
+                if media_path.stat().st_size > int(configured["max_companion_mp4_bytes"]):
+                    errors.append(
+                        f"{label} companion MP4 exceeds "
+                        f"{int(configured['max_companion_mp4_bytes'])} bytes"
+                    )
+                if media_path.suffix.casefold() != ".mp4":
+                    errors.append(f"{label}.media_path must end in .mp4 for companion-mp4")
+                streams, probe_error = _ffprobe_video(media_path)
+                if probe_error:
+                    errors.append(f"{label} {probe_error}")
+                else:
+                    video_codecs = {
+                        str(stream.get("codec_name", "")).casefold()
+                        for stream in streams
+                        if stream.get("codec_type") == "video"
+                    }
+                    audio_codecs = {
+                        str(stream.get("codec_name", "")).casefold()
+                        for stream in streams
+                        if stream.get("codec_type") == "audio"
+                    }
+                    if video_codecs != {"h264"}:
+                        errors.append(f"{label} companion MP4 must use H.264 video")
+                    if audio_codecs - {"aac"}:
+                        errors.append(f"{label} companion MP4 audio must be AAC or omitted")
+                    video_stream = next(
+                        (
+                            stream
+                            for stream in streams
+                            if stream.get("codec_type") == "video"
+                        ),
+                        {},
+                    )
+                    try:
+                        media_dimensions = (
+                            int(video_stream.get("width")),
+                            int(video_stream.get("height")),
+                        )
+                    except (TypeError, ValueError):
+                        media_dimensions = None
+                        errors.append(f"{label} companion MP4 has invalid video dimensions")
+                    media_check = {
+                        "video_codecs": sorted(video_codecs),
+                        "audio_codecs": sorted(audio_codecs),
+                    }
+                actual_duration, duration_error = _ffprobe_duration(media_path)
+                if duration_error:
+                    errors.append(f"{label} {duration_error}")
+            if actual_duration is not None:
+                media_check["actual_duration_seconds"] = round(actual_duration, 3)
+                if not (
+                    float(configured["min_duration_seconds"])
+                    <= actual_duration
+                    <= float(configured["max_duration_seconds"])
+                ):
+                    errors.append(
+                        f"{label} actual media duration {actual_duration:.3f}s is outside "
+                        f"{configured['min_duration_seconds']}-{configured['max_duration_seconds']}s"
+                    )
+                elif math.isfinite(duration):
+                    tolerance = max(0.25, actual_duration * 0.10)
+                    if abs(duration - actual_duration) > tolerance:
+                        errors.append(
+                            f"{label}.duration_seconds {duration:.3f}s differs from actual "
+                            f"media duration {actual_duration:.3f}s"
+                        )
+            color_profile, color_error = _motion_color_profile(media_path, active_palette)
+            if color_error:
+                errors.append(f"{label} {color_error}")
+            else:
+                media_check["palette"] = color_profile
+                if float(color_profile["off_palette_ratio"]) > 0.005:
+                    errors.append(
+                        f"{label} decoded motion has "
+                        f"{float(color_profile['off_palette_ratio']):.2%} off-palette pixels; "
+                        "re-encode without chromatic dithering and use the project active palette"
+                    )
+        proof_dimensions: dict[str, list[int]] = {}
+        for field_name, field_path in (
+            ("poster_path", poster_path),
+            ("end_state_path", end_state_path),
+        ):
+            if field_path is None or not field_path.is_file():
+                continue
+            try:
+                proof_size = png_dimensions(field_path)
+                decode_error = _png_decode_error(field_path)
+                if decode_error:
+                    errors.append(
+                        f"{label}.{field_name} is not a decodable PNG: {decode_error}"
+                    )
+                    continue
+                proof_dimensions[field_name] = [proof_size[0], proof_size[1]]
+                if media_dimensions is not None and proof_size != media_dimensions:
+                    errors.append(
+                        f"{label}.{field_name} dimensions {proof_size[0]}x{proof_size[1]} "
+                        f"must match media dimensions {media_dimensions[0]}x{media_dimensions[1]}"
+                    )
+            except (OSError, ValueError) as error:
+                errors.append(f"{label}.{field_name} is not a valid PNG: {error}")
+        if proof_dimensions:
+            media_check["proof_dimensions"] = proof_dimensions
+        checks.append(
+            {
+                "id": asset_id,
+                "engine": engine,
+                "delivery": delivery,
+                "domain": domain,
+                "archetype": archetype,
+                "declared_duration_seconds": duration if math.isfinite(duration) else None,
+                "actual_duration_seconds": (
+                    round(actual_duration, 3) if actual_duration is not None else None
+                ),
+                "media": media_check,
+            }
+        )
+
+    slides = [entry for entry in plan.get("slides", []) if isinstance(entry, dict)]
+    referenced_assets: dict[str, list[int]] = {}
+    motion_slides = 0
+    for entry in slides:
+        slide_number = entry.get("slide")
+        spec = entry.get("visual_contract")
+        motion_ref = str(spec.get("motion_ref", "")).strip() if isinstance(spec, dict) else ""
+        image_motion_refs = {
+            str(element.get("motion_ref", "")).strip()
+            for element in entry.get("native_elements", [])
+            if isinstance(element, dict) and str(element.get("motion_ref", "")).strip()
+        }
+        if motion_ref:
+            image_motion_refs.add(motion_ref)
+        if len(image_motion_refs) > int(configured["max_clips_per_slide"]):
+            errors.append(
+                f"slide {slide_number} references {len(image_motion_refs)} motion clips; "
+                f"maximum is {configured['max_clips_per_slide']}"
+            )
+        if image_motion_refs:
+            motion_slides += 1
+        for asset_id in sorted(image_motion_refs):
+            referenced_assets.setdefault(asset_id, []).append(slide_number)
+            asset = assets_by_id.get(asset_id)
+            if asset is None:
+                errors.append(f"slide {slide_number} references missing motion asset {asset_id!r}")
+                continue
+            delivery = str(asset.get("delivery", "")).strip().casefold()
+            matching_images = [
+                element
+                for element in entry.get("native_elements", [])
+                if isinstance(element, dict)
+                and str(element.get("motion_ref", "")).strip() == asset_id
+                and str(element.get("type", "")).strip().casefold() == "image"
+            ]
+            if len(matching_images) != 1:
+                errors.append(
+                    f"slide {slide_number} motion asset {asset_id!r} requires exactly one declared image element"
+                )
+                continue
+            declared_path = str(matching_images[0].get("asset_path", "")).strip()
+            expected_path = (
+                str(asset.get("media_path", "")).strip()
+                if delivery == "embedded-gif"
+                else str(asset.get("poster_path", "")).strip()
+            )
+            if declared_path != expected_path:
+                errors.append(
+                    f"slide {slide_number} motion image for {asset_id!r} must use "
+                    f"{'media_path' if delivery == 'embedded-gif' else 'poster_path'}"
+                )
+    allowed_motion_slides = max(
+        1,
+        math.floor(len(slides) * float(configured["max_motion_slide_ratio"])),
+    ) if slides else 0
+    if slides and motion_slides > allowed_motion_slides:
+        errors.append(
+            f"motion appears on {motion_slides}/{len(slides)} slides, above the "
+            f"{float(configured['max_motion_slide_ratio']):.0%} deck limit "
+            f"(maximum {allowed_motion_slides} for this deck)"
+        )
+    unused = sorted(set(assets_by_id) - set(referenced_assets))
+    if unused:
+        warnings.append(f"motion manifest contains unused assets: {', '.join(unused)}")
+    status = "fail" if errors else "pass" if raw_assets else "not-applicable"
+    return {"status": status, "checks": checks, "errors": errors, "warnings": warnings}
+
+
 def content_contract_audit(
     config: dict[str, Any],
     plan: dict[str, Any],
@@ -2436,18 +3277,50 @@ def visual_contract_audit(
         max_repeated = int(settings.get("max_repeated_composition", 2))
     except (TypeError, ValueError):
         max_repeated = 2
-    try:
-        minimum_coverage = float(settings.get("min_body_coverage_ratio", 0.16))
-    except (TypeError, ValueError):
-        minimum_coverage = 0.16
-    try:
-        minimum_figure_span = float(settings.get("min_figure_span_ratio", 0.50))
-    except (TypeError, ValueError):
-        minimum_figure_span = 0.50
-    try:
-        minimum_figure_area = float(settings.get("min_figure_area_ratio", 0.18))
-    except (TypeError, ValueError):
-        minimum_figure_area = 0.18
+    raw_budget_profiles = settings.get("figure_budget_profiles")
+    raw_anchor_profile_map = settings.get("anchor_profile_map")
+    if not isinstance(raw_budget_profiles, dict) or not isinstance(raw_anchor_profile_map, dict):
+        return {
+            "status": "fail",
+            "checks": [],
+            "errors": ["qa.visual_contract figure budget profiles are invalid"],
+            "warnings": [],
+        }
+    budget_profiles: dict[str, dict[str, float | tuple[float, float]]] = {}
+    budget_errors: list[str] = []
+    for profile_name, raw_profile in raw_budget_profiles.items():
+        if not isinstance(raw_profile, dict):
+            budget_errors.append(f"figure budget profile {profile_name!r} must be an object")
+            continue
+        try:
+            preferred_raw = raw_profile["preferred_bbox_area_ratio"]
+            hard_raw = raw_profile["hard_bbox_area_ratio"]
+            preferred = (float(preferred_raw[0]), float(preferred_raw[1]))
+            hard = (float(hard_raw[0]), float(hard_raw[1]))
+            minimum_area = float(raw_profile["min_information_area_ratio"])
+        except (KeyError, IndexError, TypeError, ValueError):
+            budget_errors.append(f"figure budget profile {profile_name!r} has invalid thresholds")
+            continue
+        if not (
+            0 <= hard[0] <= preferred[0] <= preferred[1] <= hard[1] <= 1
+            and 0 <= minimum_area <= 1
+        ):
+            budget_errors.append(f"figure budget profile {profile_name!r} has unordered thresholds")
+            continue
+        budget_profiles[str(profile_name).strip().casefold()] = {
+            "preferred": preferred,
+            "hard": hard,
+            "minimum_area": minimum_area,
+        }
+    anchor_profile_map = {
+        str(anchor).strip().casefold(): str(profile).strip().casefold()
+        for anchor, profile in raw_anchor_profile_map.items()
+    }
+    unknown_profiles = sorted(set(anchor_profile_map.values()) - set(budget_profiles))
+    if unknown_profiles:
+        budget_errors.append(
+            f"anchor_profile_map references unknown profiles: {', '.join(unknown_profiles)}"
+        )
     try:
         minimum_diagram_nodes = int(settings.get("minimum_diagram_nodes", 2))
     except (TypeError, ValueError):
@@ -2458,16 +3331,14 @@ def visual_contract_audit(
         minimum_diagram_labels = 2
     if (
         max_repeated < 1
-        or not 0 <= minimum_coverage <= 1
-        or not 0 <= minimum_figure_span <= 1
-        or not 0 <= minimum_figure_area <= 1
         or minimum_diagram_nodes < 1
         or minimum_diagram_labels < 1
+        or budget_errors
     ):
         return {
             "status": "fail",
             "checks": [],
-            "errors": ["qa.visual_contract thresholds are invalid"],
+            "errors": budget_errors or ["qa.visual_contract thresholds are invalid"],
             "warnings": [],
         }
     forbidden_families = {
@@ -2527,6 +3398,7 @@ def visual_contract_audit(
             continue
         role = str(entry.get("template_frame", {}).get("role", "content")).casefold()
         spec = entry.get("visual_contract")
+        anchor_type = ""
         basis_items: list[str] = []
         if settings.get("require_anchor_spec", True) and role not in {"cover", "divider"}:
             if not isinstance(spec, dict):
@@ -2591,6 +3463,16 @@ def visual_contract_audit(
         for index, element in enumerate(elements):
             if not isinstance(element, dict):
                 continue
+            position = element.get("position")
+            if (
+                not isinstance(position, dict)
+                or not {"left", "top", "width", "height"}.issubset(position)
+                or _visual_rect(position) is None
+            ):
+                errors.append(
+                    f"slide {slide} native_elements[{index}].position must use finite "
+                    "left/top/width/height values accepted by the production builder"
+                )
             element_type = str(element.get("type") or element.get("kind") or "").strip().casefold()
             visual_role = str(element.get("visual_role", "")).strip().casefold()
             if (
@@ -2625,27 +3507,30 @@ def visual_contract_audit(
                 focus_used = True
         if focus_used and isinstance(spec, dict) and not str(spec.get("focus_target", "")).strip():
             errors.append(f"slide {slide} uses the focus color without visual_contract.focus_target")
-        figure_span_ratio, figure_area_ratio, figure_roles = _figure_metrics(
+        figure_bbox_area_ratio, information_area_ratio, figure_roles = _figure_metrics(
             entry,
             zone,
             allowed_visual_roles,
             set(basis_items),
-            str(spec.get("anchor_type", "")).strip().casefold()
-            if isinstance(spec, dict)
-            else "",
+            anchor_type,
             diagram_anchor_types,
         )
-        coverage_ratio = figure_area_ratio
-        figure_exception = False
-        figure_exception_reason = ""
-        figure_structure: dict[str, Any] = {}
+        budget_profile_name = anchor_profile_map.get(anchor_type)
+        budget_profile = budget_profiles.get(budget_profile_name or "")
         if (
-            isinstance(spec, dict)
-            and not (figure_exception and figure_exception_reason)
+            settings.get("require_primary_figure", True)
+            and role not in {"cover", "divider"}
+            and anchor_type
+            and budget_profile is None
         ):
+            errors.append(
+                f"slide {slide} anchor_type {anchor_type!r} has no pinned figure budget profile"
+            )
+        figure_structure: dict[str, Any] = {}
+        if isinstance(spec, dict):
             structure_issues, figure_structure = _figure_structure_issues(
                 entry,
-                str(spec.get("anchor_type", "")).strip().casefold(),
+                anchor_type,
                 diagram_anchor_types,
                 minimum_diagram_nodes,
                 minimum_diagram_labels,
@@ -2654,43 +3539,45 @@ def visual_contract_audit(
                 set(basis_items),
             )
             errors.extend(f"slide {slide} {message}" for message in structure_issues)
-        underfill_allowed = False
-        underfill_reason = ""
-        body_requires_figure = role not in {"cover", "divider", "closing", "appendix"}
+        body_requires_figure = role == "content" or bool(add_targets)
         if (
             settings.get("require_primary_figure", True)
             and body_requires_figure
             and zone is None
-            and (not figure_exception or not figure_exception_reason)
         ):
             errors.append(
-                f"slide {slide} has no bounded figure zone; declare an add target or a justified figure exception"
+                f"slide {slide} has no bounded figure zone; content frames require the inspected add target"
             )
-        if body_requires_figure and coverage_ratio is not None and coverage_ratio < minimum_coverage:
-            if not underfill_allowed or not underfill_reason:
+        if body_requires_figure and budget_profile is not None:
+            hard_min, hard_max = budget_profile["hard"]
+            preferred_min, preferred_max = budget_profile["preferred"]
+            minimum_area = float(budget_profile["minimum_area"])
+            if figure_bbox_area_ratio is not None and figure_bbox_area_ratio < hard_min:
                 errors.append(
-                    f"slide {slide} body coverage is {coverage_ratio:.3f}, below {minimum_coverage:.3f}; add a content-specific visual or an explicit underfill_rationale"
+                    f"slide {slide} primary-figure bbox area is {figure_bbox_area_ratio:.3f}, below the {budget_profile_name} hard minimum {hard_min:.3f}"
                 )
-        if (
-            settings.get("require_primary_figure", True)
-            and body_requires_figure
-            and figure_span_ratio is not None
-            and figure_span_ratio < minimum_figure_span
-            and (not figure_exception or not figure_exception_reason)
-        ):
-            errors.append(
-                f"slide {slide} primary-figure span is {figure_span_ratio:.3f}, below {minimum_figure_span:.3f}; enlarge the content-specific figure or declare a justified figure exception"
-            )
-        if (
-            settings.get("require_primary_figure", True)
-            and body_requires_figure
-            and figure_area_ratio is not None
-            and figure_area_ratio < minimum_figure_area
-            and (not figure_exception or not figure_exception_reason)
-        ):
-            errors.append(
-                f"slide {slide} primary-figure area is {figure_area_ratio:.3f}, below {minimum_figure_area:.3f}; enlarge the information-bearing visual geometry"
-            )
+            if figure_bbox_area_ratio is not None and figure_bbox_area_ratio > hard_max:
+                errors.append(
+                    f"slide {slide} primary-figure bbox area is {figure_bbox_area_ratio:.3f}, above the {budget_profile_name} hard maximum {hard_max:.3f}; reduce the figure footprint"
+                )
+            if information_area_ratio is not None and information_area_ratio < minimum_area:
+                errors.append(
+                    f"slide {slide} information-bearing area is {information_area_ratio:.3f}, below the {budget_profile_name} minimum {minimum_area:.3f}"
+                )
+            if (
+                figure_bbox_area_ratio is not None
+                and hard_min <= figure_bbox_area_ratio < preferred_min
+            ):
+                warnings.append(
+                    f"slide {slide} primary-figure bbox area {figure_bbox_area_ratio:.3f} is below the {budget_profile_name} preferred band {preferred_min:.3f}-{preferred_max:.3f}; verify readability in Pass B"
+                )
+            elif (
+                figure_bbox_area_ratio is not None
+                and preferred_max < figure_bbox_area_ratio <= hard_max
+            ):
+                warnings.append(
+                    f"slide {slide} primary-figure bbox area {figure_bbox_area_ratio:.3f} is above the {budget_profile_name} preferred band {preferred_min:.3f}-{preferred_max:.3f}; reduce visual dominance unless the render proves it necessary"
+                )
         checks.append(
             {
                 "slide": slide,
@@ -2698,13 +3585,13 @@ def visual_contract_audit(
                 "composition_signature": signature,
                 "composition_family": str(spec.get("family", "")) if isinstance(spec, dict) else None,
                 "anchor_type": str(spec.get("anchor_type", "")) if isinstance(spec, dict) else None,
-                "body_coverage_ratio": round(coverage_ratio, 4) if coverage_ratio is not None else None,
-                "figure_span_ratio": round(figure_span_ratio, 4) if figure_span_ratio is not None else None,
-                "figure_area_ratio": round(figure_area_ratio, 4) if figure_area_ratio is not None else None,
+                "figure_budget_profile": budget_profile_name,
+                "preferred_bbox_area_ratio": list(budget_profile["preferred"]) if budget_profile else None,
+                "hard_bbox_area_ratio": list(budget_profile["hard"]) if budget_profile else None,
+                "figure_bbox_area_ratio": round(figure_bbox_area_ratio, 4) if figure_bbox_area_ratio is not None else None,
+                "information_area_ratio": round(information_area_ratio, 4) if information_area_ratio is not None else None,
                 "figure_roles": sorted(set(figure_roles)),
                 "figure_structure": figure_structure,
-                "underfill_allowed": underfill_allowed,
-                "figure_exception_allowed": figure_exception,
             }
         )
     for signature, slides in signature_slides.items():
@@ -2888,6 +3775,7 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
     profile = derive_template_profile(paths)
     write_json(paths["profile"], profile)
     config.setdefault("template", {})["source_sha256"] = profile["source_sha256"]
+    config["template"]["profile_sha256"] = sha256_file(paths["profile"])
     template_fonts = list(profile.get("theme", {}).get("fonts", []))
     font_scheme = profile.get("theme", {}).get("font_scheme", {})
     raw_minor_fonts = font_scheme.get("minorFont", {}) if isinstance(font_scheme, dict) else {}
@@ -2924,13 +3812,13 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
     )
     style["language_exceptions"] = inherited_language_exceptions
     if retained_lab_template:
-        default_thesis = "A quiet scientific editorial canvas: locked Yonsei S3 chrome, one blue system, short English keyword titles, and one dominant research figure per content slide."
-        default_system = "Clone the supplied cover for slide 1 and the content frame for body slides; preserve inherited chrome and typography; use only the closed semantic palette and native editable figures inside the body zone."
-        default_signature = "locked S3/Yonsei chrome plus one large editable research figure with a single blue focus"
+        default_thesis = "A quiet scientific editorial canvas: locked Yonsei S3 chrome, one blue system, short English keyword titles, and one proportionate research visual per content slide."
+        default_system = "Clone the supplied cover for slide 1 and the content frame for body slides; preserve inherited chrome and typography; use only the closed semantic palette and profile-sized native figures or source-bound motion inside the body zone."
+        default_signature = "locked S3/Yonsei chrome plus one restrained editable research visual with a single blue focus"
     else:
-        default_thesis = "A disciplined research canvas that preserves the supplied template identity, uses concise English keyword titles, and gives each content slide one dominant figure."
-        default_system = f"Clone only inspected source frames; preserve inherited chrome and {preferred_body} typography; use the closed semantic palette and native editable figures only inside declared safe zones."
-        default_signature = "locked inherited template chrome plus one dominant editable research figure inside the approved content zone"
+        default_thesis = "A disciplined research canvas that preserves the supplied template identity, uses concise English keyword titles, and gives each content slide one proportionate primary visual."
+        default_system = f"Clone only inspected source frames; preserve inherited chrome and {preferred_body} typography; use the closed semantic palette and profile-sized native figures or source-bound motion only inside declared safe zones."
+        default_signature = "locked inherited template chrome plus one restrained editable research visual inside the approved content zone"
     design_path = project / "content/design-system.json"
     design = read_json(design_path) if design_path.exists() else {}
     preserve_design_declaration = design.get("template_sha256") == profile["source_sha256"]
@@ -2955,7 +3843,9 @@ def run_template_inspection(config: dict[str, Any], config_path: Path, project: 
                 "sentence headlines or multiline titles",
                 "decorative straplines, subtitles, or transition prose",
                 "raw hex colors or rotating accent colors",
-                "text-only body slides without a dominant figure",
+                "text-only body slides without a primary visual",
+                "oversized figures outside the anchor-specific budget",
+                "motion used where a static or progressive-native diagram is clearer",
                 "full-slide raster wrappers in native mode",
                 "a second template or unrelated visual language mixed into this deck",
             ],
@@ -3283,6 +4173,23 @@ def command_doctor(_: argparse.Namespace) -> int:
     skill = find_presentations_skill()
     soffice = find_soffice()
     ssh = shutil.which("ssh")
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    uvx = shutil.which("uvx")
+    graphviz_dot = shutil.which("dot")
+    direct_manim = shutil.which("manim")
+    direct_manim_ok = False
+    if direct_manim:
+        try:
+            direct_manim_ok = subprocess.run(
+                [direct_manim, "--version"],
+                text=True,
+                capture_output=True,
+                timeout=8,
+                check=False,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            direct_manim_ok = False
     template_scripts = skill / "template_following_scripts" if skill else None
     artifact_helper = skill / "container_tools/setup_artifact_tool_workspace.mjs" if skill else None
     required_template_helpers = (
@@ -3310,6 +4217,11 @@ def command_doctor(_: argparse.Namespace) -> int:
     optional_checks = {
         "libreoffice_package_notes_probe": bool(soffice),
         "ssh_gpu_measurements": bool(ssh),
+        "ffmpeg_motion_rendering": bool(ffmpeg),
+        "ffprobe_motion_validation": bool(ffprobe),
+        "uvx_pinned_manim_runtime": bool(uvx),
+        "graphviz_static_topology": bool(graphviz_dot),
+        "direct_manim_runtime": direct_manim_ok,
     }
     missing_core = [name for name, available in core_checks.items() if not available]
     missing_optional = [name for name, available in optional_checks.items() if not available]
@@ -3319,6 +4231,11 @@ def command_doctor(_: argparse.Namespace) -> int:
         "python": str(python) if python else None,
         "soffice": str(soffice) if soffice else None,
         "ssh": ssh,
+        "ffmpeg": ffmpeg,
+        "ffprobe": ffprobe,
+        "uvx": uvx,
+        "graphviz_dot": graphviz_dot,
+        "direct_manim": direct_manim,
         "presentations_skill": str(skill) if skill else None,
         "artifact_workspace_helper": str(artifact_helper) if artifact_helper else None,
         "template_helpers": str(template_scripts) if template_scripts else None,
@@ -3332,7 +4249,11 @@ def command_doctor(_: argparse.Namespace) -> int:
         "optional": {
             "checks": optional_checks,
             "missing": missing_optional,
-            "note": "LibreOffice is only a limited package/slide-count/speaker-note persistence probe; SSH is only needed for live GPU evidence.",
+            "note": (
+                "LibreOffice and SSH remain optional. Motion uses the pinned "
+                f"uvx --from manim=={DEFAULT_MOTION_CONTRACT['manim_version']} route; "
+                "a broken global manim executable does not block that isolated runtime."
+            ),
         },
         "status": "ok" if not missing_core else "missing-core-tools",
     }
@@ -3510,6 +4431,22 @@ def validate_edit_targets(
                 )
             if not str(target.get("reason", "")).strip():
                 raise LabDeckError(f"slide {slide_number} add target {index + 1} requires a reason")
+            inherited_zone = frame.get("safe_content_zone") if isinstance(frame, dict) else None
+            if isinstance(inherited_zone, dict):
+                try:
+                    inherited_values = [float(inherited_zone[key]) for key in ("x", "y", "w", "h")]
+                except (KeyError, TypeError, ValueError) as error:
+                    raise LabDeckError(
+                        f"slide {slide_number} selected frame has an invalid safe_content_zone"
+                    ) from error
+                if any(
+                    not math.isclose(actual, expected, rel_tol=0, abs_tol=1e-6)
+                    for actual, expected in zip(values, inherited_values)
+                ):
+                    raise LabDeckError(
+                        f"slide {slide_number} add target {index + 1} zone must exactly match "
+                        "the inspected safe_content_zone; custom denominator zones are forbidden"
+                    )
         validated.append(target)
     return validated
 
@@ -3561,7 +4498,9 @@ def build_template_frame_map(
         frame_spec = entry.get("template_frame")
         if not isinstance(frame_spec, dict):
             raise LabDeckError(f"slide {expected} template_frame must be an object in schema v2")
-        role = str(frame_spec.get("role", "content"))
+        role = str(frame_spec.get("role", "")).strip().casefold()
+        if not role:
+            raise LabDeckError(f"slide {expected} template_frame.role is required")
         source_slide = frame_spec.get("source_slide")
         if source_slide is not None:
             if isinstance(source_slide, bool):
@@ -3573,6 +4512,14 @@ def build_template_frame_map(
             if source_slide < 1:
                 raise LabDeckError(f"slide {expected} template_frame.source_slide must be positive")
         frame = profile_slide(profile, role, source_slide)
+        frame_role = str(frame.get("role", "")).strip().casefold()
+        if not frame_role:
+            raise LabDeckError(f"template profile frame for slide {expected} is missing role")
+        if role != frame_role:
+            raise LabDeckError(
+                f"slide {expected} declares template_frame.role {role!r}, but source slide "
+                f"{frame.get('source_slide')} is an inspected {frame_role!r} frame"
+            )
         raw_frame_source = frame.get("source_slide")
         if isinstance(raw_frame_source, bool):
             raise LabDeckError(f"template profile frame for slide {expected} has invalid source_slide")
@@ -3591,6 +4538,7 @@ def build_template_frame_map(
             {
                 "outputSlide": expected,
                 "sourceSlide": frame_source,
+                "sourceFrameRole": frame_role,
                 "narrativeRole": str(entry.get("narrative_job", "")).strip(),
                 "reuseMode": "duplicate-slide",
                 "editTargets": targets,
@@ -3634,20 +4582,12 @@ def command_prepare_template(args: argparse.Namespace) -> int:
         raise LabDeckError(f"template PPTX not found: {paths['pptx']}")
     require_default_template_integrity(paths["pptx"])
     current_source_sha = sha256_file(paths["pptx"])
-    inspection_stale = not paths["profile"].exists() or not paths["inspect_manifest"].exists()
-    if not inspection_stale:
-        try:
-            profile_source_sha = str(read_json(paths["profile"]).get("source_sha256", ""))
-        except (AttributeError, LabDeckError):
-            profile_source_sha = ""
-        inspection_stale = (
-            str(template_config(config).get("source_sha256", "")) != current_source_sha
-            or profile_source_sha != current_source_sha
-        )
-    if inspection_stale:
-        run_template_inspection(config, config_path, project)
-        config, config_path, project = load_config(config_path)
-        paths = template_paths(config, project)
+    # The profile is derived output, not an editable project input. Re-inspect on
+    # every preparation so a copied source hash cannot legitimize changed roles
+    # or a smaller denominator zone.
+    run_template_inspection(config, config_path, project)
+    config, config_path, project = load_config(config_path)
+    paths = template_paths(config, project)
     plan_path = project / "content/slide-plan.json"
     if not plan_path.exists():
         raise LabDeckError(f"slide plan missing: {plan_path}")
@@ -3706,6 +4646,7 @@ def command_init(args: argparse.Namespace) -> int:
     refuse_overwrite(config_path, args.force)
     for subdir in (
         "content",
+        "assets/motion",
         "build",
         "evidence/raw",
         "evidence/normalized",
@@ -3713,6 +4654,7 @@ def command_init(args: argparse.Namespace) -> int:
         "render",
         "reports",
         "work",
+        "work/motion",
     ):
         (project / subdir).mkdir(parents=True, exist_ok=True)
 
@@ -3837,6 +4779,7 @@ def command_init(args: argparse.Namespace) -> int:
             "render_height": 900,
             "content_contract": dict(DEFAULT_CONTENT_CONTRACT),
             "visual_contract": dict(DEFAULT_VISUAL_CONTRACT),
+            "motion_contract": dict(DEFAULT_MOTION_CONTRACT),
             "user_acceptance": {
                 "required": True,
                 "status": "pending",
@@ -3880,18 +4823,24 @@ def command_init(args: argparse.Namespace) -> int:
         },
     )
     write_json(project / "content/claims.json", {"schema_version": 1, "claims": []})
+    write_json(project / "content/motion-assets.json", {"schema_version": 1, "assets": []})
     write_json(project / "content/notes.json", {"schema_version": 1, "slides": []})
     builder_scaffold = ASSETS_DIR / "template-builder-scaffold.mjs"
     if not builder_scaffold.exists():
         raise LabDeckError(f"builder scaffold missing: {builder_scaffold}")
     shutil.copy2(builder_scaffold, project / "build/builder.mjs")
+    for scene_name in ("system_os_interaction.py", "ai_serving_interaction.py"):
+        scene_source = ASSETS_DIR / "manim" / scene_name
+        if not scene_source.exists():
+            raise LabDeckError(f"Manim scene starter missing: {scene_source}")
+        shutil.copy2(scene_source, project / "work/motion" / scene_name)
     for pass_name, title in (
         ("pass-a.md", "Pass A: System Contract / Constraint Integrity"),
         ("pass-b.md", "Pass B: Audience Impact / Expressive Readability"),
     ):
         write_text(
             project / "reports" / pass_name,
-            f"# {title}\n\nVERDICT: PENDING\nConfidence: Pending\nEvidence: PENDING\nDeck SHA256: PENDING\nRender manifest SHA256: PENDING\nSource manifest SHA256: PENDING\nUnresolved Critical: PENDING\nBlocking findings: PENDING\n\n## Checks\n\n- [ ] Template fidelity and inherited chrome: PENDING\n- [ ] Composition, hierarchy, and figure-first reading: PENDING\n- [ ] English copy, keyword titles, closed palette, and no filler: PENDING\n- [ ] Content truth, provenance, and editability: PENDING\n\n## Findings\n\n| Slide | Finding | Severity | Fix | Status |\n|---|---|---|---|---|\n",
+            f"# {title}\n\nVERDICT: PENDING\nConfidence: Pending\nEvidence: PENDING\nDeck SHA256: PENDING\nRender manifest SHA256: PENDING\nSource manifest SHA256: PENDING\nUnresolved Critical: PENDING\nBlocking findings: PENDING\n\n## Checks\n\n- [ ] Template fidelity and inherited chrome: PENDING\n- [ ] Composition, hierarchy, and proportionate visual-first reading: PENDING\n- [ ] Motion purpose, proof frames, and static fallback: PENDING\n- [ ] English copy, keyword titles, closed palette, and no filler: PENDING\n- [ ] Content truth, provenance, and editability: PENDING\n\n## Findings\n\n| Slide | Finding | Severity | Fix | Status |\n|---|---|---|---|---|\n",
         )
     write_text(
         project / "reports/design-debt.md",
@@ -3949,6 +4898,12 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
     errors: list[str] = []
     warnings: list[str] = []
     visual_contract_report: dict[str, Any] = {
+        "status": "not-run",
+        "checks": [],
+        "errors": [],
+        "warnings": [],
+    }
+    motion_contract_report: dict[str, Any] = {
         "status": "not-run",
         "checks": [],
         "errors": [],
@@ -4104,6 +5059,9 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
     content_contract_report = content_contract_audit(config, plan, notes_data)
     errors.extend(content_contract_report["errors"])
     warnings.extend(content_contract_report["warnings"])
+    motion_contract_report = motion_contract_audit(config, plan, project)
+    errors.extend(motion_contract_report["errors"])
+    warnings.extend(motion_contract_report["warnings"])
 
     claims_path = project / "content/claims.json"
     if not claims_path.exists():
@@ -4172,6 +5130,7 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
                 if design and design.get("template_sha256") != current_sha:
                     errors.append("design-system template hash is stale")
             if paths["profile"].exists() and paths["frame_map"].exists() and slides:
+                errors.extend(template_profile_integrity_errors(config, paths["profile"]))
                 advanced_actions = declared_advanced_edit_actions(config, project)
                 expected_map = build_template_frame_map(read_json(paths["profile"]), plan, advanced_actions)
                 actual_map = read_json(paths["frame_map"])
@@ -4246,6 +5205,7 @@ def audit_config(config: dict[str, Any], config_path: Path, project: Path) -> di
         "title_fit_preflight": title_fit_preflight,
         "content_contract": content_contract_report,
         "visual_contract": visual_contract_report,
+        "motion_contract": motion_contract_report,
     }
     return report
 
@@ -4258,6 +5218,8 @@ def write_audit_report(project: Path, report: dict[str, Any]) -> None:
         write_json(project / "reports/content-contract.json", report["content_contract"])
     if isinstance(report.get("visual_contract"), dict):
         write_json(project / "reports/visual-contract.json", report["visual_contract"])
+    if isinstance(report.get("motion_contract"), dict):
+        write_json(project / "reports/motion-contract.json", report["motion_contract"])
     lines = [
         f"AUDIT: {report['status'].upper()}",
         f"Slide-plan entries: {report['slide_plan_entries']}",
@@ -4940,6 +5902,8 @@ def command_qa(args: argparse.Namespace) -> int:
         "notes": inspection,
         "template_fidelity": fidelity,
         "content_contract": audit.get("content_contract", {}),
+        "visual_contract": audit.get("visual_contract", {}),
+        "motion_contract": audit.get("motion_contract", {}),
         "compatibility": compatibility,
         "user_acceptance": acceptance_report,
         "slides_test": {

@@ -132,6 +132,10 @@ class TemplateFrameMapTests(unittest.TestCase):
             [1, 2, 2, 2],
         )
         self.assertTrue(all(entry["reuseMode"] == "duplicate-slide" for entry in frame_map["outputSlides"]))
+        self.assertEqual(
+            [entry["sourceFrameRole"] for entry in frame_map["outputSlides"]],
+            ["cover", "content", "content", "content"],
+        )
         self.assertEqual(frame_map["omittedSourceSlides"], [])
         for entry in frame_map["outputSlides"][1:]:
             insertion = next(target for target in entry["editTargets"] if target["action"] == "add")
@@ -148,6 +152,34 @@ class TemplateFrameMapTests(unittest.TestCase):
 
         with self.assertRaisesRegex(lab_slides.LabDeckError, "no source slide 99"):
             lab_slides.build_template_frame_map(sample_profile(), plan)
+
+    def test_declared_role_must_match_inspected_source_frame(self) -> None:
+        entry = slide_entry(1, "content", 2)
+        entry["template_frame"]["role"] = "closing"
+        with self.assertRaisesRegex(
+            lab_slides.LabDeckError,
+            "declares template_frame.role 'closing'.*inspected 'content' frame",
+        ):
+            lab_slides.build_template_frame_map(
+                sample_profile(),
+                {"slides": [entry]},
+            )
+
+    def test_custom_add_zone_cannot_shrink_audit_denominator(self) -> None:
+        entry = slide_entry(1, "content", 2)
+        frame = sample_profile()["slides"][1]
+        targets = lab_slides.default_edit_targets(frame)
+        add_target = next(target for target in targets if target["action"] == "add")
+        add_target["zone"] = {"x": 100, "y": 150, "w": 100, "h": 100}
+        entry["template_frame"]["edit_targets"] = targets
+        with self.assertRaisesRegex(
+            lab_slides.LabDeckError,
+            "must exactly match the inspected safe_content_zone",
+        ):
+            lab_slides.build_template_frame_map(
+                sample_profile(),
+                {"slides": [entry]},
+            )
 
 
 class RoleAwareNoteRangeTests(unittest.TestCase):

@@ -26,6 +26,11 @@ A palette, font list, or screenshot is not a PowerPoint template. The source als
 
 Every output slide maps to a real source slide with `reuseMode: duplicate-slide`. A source slide can be reused many times. The frame map is derived from `content/slide-plan.json`; rerun `prepare-template` after routing changes.
 
+`template_frame.role` must match the inspected role of the selected source slide.
+When an inspected frame exposes `safe_content_zone`, a custom add target must
+use that exact zone. Relabeling a content frame as `closing`/`appendix` or
+shrinking the add zone to weaken a figure budget is a contract failure.
+
 An inherited edit target uses `rewrite`, `rewrite-and-reposition`, `replace`, `delete`, or `fill-placeholder` and must resolve to a source element ID. An addition uses:
 
 ```json
@@ -57,6 +62,8 @@ Start from `assets/template-builder-scaffold.mjs`.
 - Keep the existing slide count and order.
 - Resolve inherited edits by stable source name/role from the frame map and profile.
 - Add advanced native mechanisms only through deck-specific builder functions and keep their bounding boxes inside the allowed zone.
+- Add PNG/JPEG/GIF only through bounded `image` declarations with project-local paths, English alt text, and supplied source references. GIF additionally needs a validated `motion_ref`.
+- For `fit: contain`, make the declared image frame match the source aspect ratio within 0.5%; otherwise Artifact Tool shrinks the exported image bbox and strict declaration matching fails. Use `cover` only when intentional cropping is safe.
 - Create connectors before nodes.
 - Export with `PresentationFile.exportPptx`.
 - Do not call `Presentation.create()` or `presentation.slides.add()`.
@@ -66,4 +73,3 @@ Start from `assets/template-builder-scaffold.mjs`.
 Final QA re-inspects the output and runs the Presentations template-fidelity checker with paired starter/final layout evidence. It fails on fresh-slide rebuilds, direct OOXML or python-pptx mutation, LibreOffice mutation, unresolved placeholders, unplanned overlays, missing starter import/export evidence, or other forbidden bypasses.
 
 The source template, frame map, design declaration, builder, content ledgers, final renders, and final PPTX are fingerprinted. Any material change invalidates the visual reviews.
-

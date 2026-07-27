@@ -13,7 +13,7 @@ SLIDE_SKILL = "build-lab-meeting-slides"
 MCP_NAME = "s3-research-memory"
 MCP_URL = "https://s3wiki.yonsei.ac.kr/mcp"
 APP_ID = "asdk_app_6a669c14a28481919c2f2980b06d1628"
-PLUGIN_VERSION = "0.4.0"
+PLUGIN_VERSION = "0.5.0"
 LEGACY_PLUGINS = ("build-lab-meeting-slides", "s3-research-memory")
 PERSONAL_APP_IDENTIFIERS = (
     "dev-6a58e7a411988191a74fda9cfcf6b604",

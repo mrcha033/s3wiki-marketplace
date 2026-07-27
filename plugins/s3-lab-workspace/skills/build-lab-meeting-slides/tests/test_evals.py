@@ -23,7 +23,7 @@ class EvalMetadataTests(unittest.TestCase):
         metadata = json.loads(EVALS_PATH.read_text(encoding="utf-8"))
 
         self.assertEqual(metadata["skill_name"], "build-lab-meeting-slides")
-        self.assertEqual(len(metadata["evals"]), 3)
+        self.assertEqual(len(metadata["evals"]), 4)
         ids = [case["id"] for case in metadata["evals"]]
         self.assertEqual(len(ids), len(set(ids)))
         for case in metadata["evals"]:
@@ -33,7 +33,7 @@ class EvalMetadataTests(unittest.TestCase):
             for relative_path in case["files"]:
                 self.assertTrue((SKILL_ROOT / relative_path).is_file(), relative_path)
 
-    def test_eval_set_covers_all_three_authoring_routes(self) -> None:
+    def test_eval_set_covers_authoring_routes_and_systems_motion(self) -> None:
         prompts = "\n".join(
             case["prompt"] + "\n" + case["expected_output"]
             for case in json.loads(EVALS_PATH.read_text(encoding="utf-8"))["evals"]
@@ -42,6 +42,8 @@ class EvalMetadataTests(unittest.TestCase):
         self.assertIn("exact clone/edit", prompts)
         self.assertIn("12-slide", prompts)
         self.assertIn("html-assisted-native", prompts)
+        self.assertIn("continuous-batching", prompts)
+        self.assertIn("embedded gif", prompts)
 
 
 if __name__ == "__main__":

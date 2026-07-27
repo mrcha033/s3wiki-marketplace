@@ -1,7 +1,7 @@
 {
   "name": "s3-lab-workspace",
-  "version": "0.4.0",
-  "description": "Search S3 research memory and build restrained, English, figure-first lab-meeting slides.",
+  "version": "0.5.0",
+  "description": "Search S3 research memory and build restrained English systems decks with optional source-bound motion.",
   "author": {
     "name": "S3 Lab",
     "url": "https://s3wiki.yonsei.ac.kr/"
@@ -20,21 +20,23 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "S3 Lab Workspace",
-    "shortDescription": "Research memory and figure-first lab slides",
-    "longDescription": "Search and extend the lab's shared S3 Research Memory, then turn research progress into restrained, editable PowerPoint decks with English keyword titles, a closed lab palette, and dominant research figures. The plugin connects directly to the central HTTPS MCP service and does not depend on a personal app ID.",
+    "shortDescription": "Research memory and restrained systems slides",
+    "longDescription": "Search and extend the lab's shared S3 Research Memory, then turn systems, OS, and AI-serving progress into restrained editable PowerPoint decks with English keyword titles, a closed lab palette, proportionate visuals, and optional source-bound Manim motion with static fallbacks. The plugin connects directly to the central HTTPS MCP service and does not depend on a personal app ID.",
     "developerName": "S3 Lab",
     "category": "Productivity",
     "capabilities": [
       "Research memory",
       "Evidence retrieval",
       "Editable PowerPoint",
-      "Figure-first lab decks",
+      "Proportionate systems decks",
+      "Manim GIF and video fallbacks",
       "Policy-controlled writes"
     ],
     "websiteURL": "https://s3wiki.yonsei.ac.kr/",
     "defaultPrompt": [
       "Find relevant S3 research lessons, then outline this week's English lab-meeting deck.",
-      "Build a restrained editable deck with keyword titles and one dominant figure per body slide.",
+      "Build a restrained editable systems deck with keyword titles and proportionate visuals.",
+      "Use source-bound Manim motion only where it clarifies component interaction.",
       "Save this evidence-backed lesson to S3 Research Memory."
     ],
     "brandColor": "#123B5D",

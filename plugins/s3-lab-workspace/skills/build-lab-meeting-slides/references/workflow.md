@@ -23,6 +23,7 @@ project/
 │   ├── outline.md
 │   ├── slide-plan.json
 │   ├── claims.json
+│   ├── motion-assets.json
 │   ├── notes.json
 │   ├── design-system.json
 │   ├── template-profile.json
@@ -40,6 +41,7 @@ project/
 │   ├── pass-b.md
 │   └── design-debt.md
 └── work/
+    ├── motion/
     └── template/
         └── template-starter.pptx
 ```
@@ -109,7 +111,7 @@ python3 scripts/lab_slides.py prepare-template /absolute/path/to/labdeck.json
 python3 scripts/lab_slides.py audit /absolute/path/to/labdeck.json
 ```
 
-`prepare-template` duplicates the mapped source slides into `work/template/template-starter.pptx`. `audit` rejects a stale template hash, stale frame map, missing starter, unbounded additions, incomplete communication decisions, and builders that create a fresh presentation. It also enforces dictionary-backed English copy, keyword titles, role-bound visible copy, filler and word budgets, semantic palette tokens, a primary figure spanning at least 50% and occupying at least 18% of the body zone with authenticated information-bearing geometry, content/source basis, and composition diversity. Boundary/annotation rectangles do not count; plots need numeric or source-bound data and valid primitive axes when applicable. The audit writes `reports/title-fit-preflight.json`, `reports/content-contract.json`, and `reports/visual-contract.json`. A title that needs more lines than the inherited box permits fails before `finalize`; a missing measurement font is an explicit warning/skip that still requires visual closure.
+`prepare-template` duplicates the mapped source slides into `work/template/template-starter.pptx`. `audit` rejects a stale template hash, stale derived-profile hash, stale frame map, missing starter, unbounded additions, incomplete communication decisions, and builders that create a fresh presentation. It also enforces dictionary-backed English copy, keyword titles, role-bound visible copy, filler and word budgets, semantic palette tokens, anchor-specific figure budgets, authenticated information-bearing geometry, content/source basis, and composition diversity. Typical preferred figure bounding-box areas are 22–42% of the body zone; hard minima/maxima depend on the anchor. Boundary/annotation rectangles do not count; plots need numeric or source-bound data and valid primitive axes when applicable. The audit writes `reports/title-fit-preflight.json`, `reports/content-contract.json`, `reports/visual-contract.json`, and `reports/motion-contract.json`. A title that needs more lines than the inherited box permits fails before `finalize`; a missing measurement font is an explicit warning/skip that still requires visual closure.
 
 ## Stage 2: evidence
 
@@ -137,7 +139,25 @@ The builder imports the prepared starter and exports the edited presentation. It
 - `LABDECK_TEMPLATE_PROFILE`;
 - `LABDECK_DESIGN_SYSTEM`.
 
-Edit mapped inherited title/subtitle targets in place. Preserve the master/layout relationship, logo, rail, top rule, font metrics, paragraph spacing, insets, and image crops. Add native editable arrays, lanes, arrows, tables, charts, code deltas, and technical shapes only inside the approved body zone. Use only semantic palette tokens. Every text-bearing element needs a `text_role`; every non-text element needs a `visual_role`. If content does not fit, shorten, split, or remap it; do not hide the template under a slide-sized overlay.
+Edit mapped inherited title/subtitle targets in place. Preserve the master/layout relationship, logo, rail, top rule, font metrics, paragraph spacing, insets, and image crops. Add native editable arrays, lanes, arrows, tables, charts, code deltas, technical shapes, and source-bound PNG/JPEG/GIF images only inside the approved body zone. Use only semantic palette tokens. Every text-bearing element needs a `text_role`; every non-text element needs a `visual_role`. If content does not fit, shorten, split, or remap it; do not hide the template under a slide-sized overlay.
+
+### Optional systems motion
+
+Default to static native diagrams. Use progressive native slides for two or
+three discrete states. Use Manim only for continuous time, queueing,
+concurrency, ownership, or state-transfer interactions.
+
+`init` copies two quiet scene starters into `work/motion/`. Run
+`scripts/motion_assets.py doctor`, then `render-manim`. The helper pins Manim
+Community 0.20.1 through `uvx`, runs a low-quality smoke render, emits either an
+animated GIF or companion MP4, and extracts start/end PNG proof frames.
+
+Register every asset in `content/motion-assets.json`. The manifest and slide
+plan must agree exactly. An embedded GIF uses its `media_path` in one declared
+`image`; a companion MP4 uses its `poster_path` in the slide and is delivered
+beside the deck. Motion is limited to one clip per slide, 3–8 seconds, and
+normally 25% of the deck. Read
+[motion-and-domain-visuals.md](motion-and-domain-visuals.md).
 
 ## Stage 4: notes and compatibility
 
@@ -159,7 +179,7 @@ Run `qa --skip-review-gate` to create full-size renders, a montage, package/over
 Dispatch two independent read-only reviewers against every full-size PNG:
 
 - Pass A: template fidelity, editability, frame-map integrity, English copy, closed-palette provenance, claim truth, and anti-slop.
-- Pass B: keyword-title quality, audience comprehension, figure-first reading, consistent color semantics, label legibility, pacing, and overlap.
+- Pass B: keyword-title quality, audience comprehension, proportionate visual-first reading, static motion fallback, consistent color semantics, label legibility, pacing, and overlap.
 
 Each report must quote the current deck SHA-256, render-manifest SHA-256, and source-manifest SHA-256. A material edit invalidates all three fingerprints and both reviews. After fixes, rerender and replace the stale reports, then run normal `qa`.
 

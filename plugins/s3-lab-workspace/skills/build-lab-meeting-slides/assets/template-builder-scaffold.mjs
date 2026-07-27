@@ -5,6 +5,7 @@
 // template-fidelity QA can prove exact clone/edit.
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
+import path from "node:path";
 import { FileBlob, PresentationFile } from "@oai/artifact-tool";
 
 const requiredEnv = [
@@ -23,6 +24,7 @@ const [config, plan, frameMap] = await Promise.all([
   fs.readFile(process.env.LABDECK_SLIDE_PLAN, "utf8").then(JSON.parse),
   fs.readFile(process.env.LABDECK_TEMPLATE_MAP, "utf8").then(JSON.parse),
 ]);
+const projectRoot = await fs.realpath(process.cwd());
 if (!config || typeof config !== "object" || Array.isArray(config)) {
   throw new Error("LABDECK_CONFIG must contain a JSON object");
 }
@@ -193,6 +195,50 @@ function normalizePosition(position, label) {
   return normalized;
 }
 
+function sourceImageDimensions(bytes, extension, label) {
+  if (extension === ".gif") {
+    if (bytes.length < 10 || !["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) {
+      throw new Error(`${label} is not a valid GIF`);
+    }
+    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  }
+  if (extension === ".png") {
+    const pngSignature = "89504e470d0a1a0a";
+    if (bytes.length < 24 || bytes.subarray(0, 8).toString("hex") !== pngSignature) {
+      throw new Error(`${label} is not a valid PNG`);
+    }
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  }
+  if (extension === ".jpg" || extension === ".jpeg") {
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      throw new Error(`${label} is not a valid JPEG`);
+    }
+    let cursor = 2;
+    const sofMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+    while (cursor + 8 < bytes.length) {
+      if (bytes[cursor] !== 0xff) {
+        cursor += 1;
+        continue;
+      }
+      const marker = bytes[cursor + 1];
+      cursor += 2;
+      if (marker === 0xd8 || marker === 0xd9) continue;
+      if (cursor + 2 > bytes.length) break;
+      const segmentLength = bytes.readUInt16BE(cursor);
+      if (segmentLength < 2 || cursor + segmentLength > bytes.length) break;
+      if (sofMarkers.has(marker) && segmentLength >= 7) {
+        return {
+          width: bytes.readUInt16BE(cursor + 5),
+          height: bytes.readUInt16BE(cursor + 3),
+        };
+      }
+      cursor += segmentLength;
+    }
+    throw new Error(`${label} has no readable JPEG size marker`);
+  }
+  throw new Error(`${label} has an unsupported image extension`);
+}
+
 function validateEditTargets(entry, mapEntry) {
   if (!Array.isArray(mapEntry?.editTargets)) {
     throw new Error(`slide ${entry.slide} frame map editTargets must be an array`);
@@ -297,7 +343,7 @@ function normalizedTextStyle(rawStyle, defaultFontSizePt, defaults = {}, label =
   };
 }
 
-function addDeclaredElements(slide, entry, mapEntry) {
+async function addDeclaredElements(slide, entry, mapEntry) {
   const insertion = mapEntry.editTargets.find((item) => item.action === "add");
   const elements = entry.native_elements || [];
   if (!Array.isArray(elements)) {
@@ -358,6 +404,56 @@ function addDeclaredElements(slide, entry, mapEntry) {
         bold: Boolean(spec.style?.bold),
         alignment: spec.style?.alignment || "left",
       }, `${label}.style`);
+    } else if (spec.type === "image") {
+      const assetPath = requireNonEmptyString(spec.asset_path, `${label}.asset_path`);
+      if (path.isAbsolute(assetPath)) {
+        throw new Error(`${label}.asset_path must be project-relative`);
+      }
+      const resolvedAsset = await fs.realpath(path.resolve(projectRoot, assetPath));
+      const projectPrefix = `${projectRoot}${path.sep}`;
+      if (!resolvedAsset.startsWith(projectPrefix)) {
+        throw new Error(`${label}.asset_path escapes the deck project`);
+      }
+      const extension = path.extname(resolvedAsset).toLowerCase();
+      const contentTypes = new Map([
+        [".gif", "image/gif"],
+        [".jpeg", "image/jpeg"],
+        [".jpg", "image/jpeg"],
+        [".png", "image/png"],
+      ]);
+      const contentType = contentTypes.get(extension);
+      if (!contentType) {
+        throw new Error(`${label}.asset_path must be PNG, JPEG, or GIF`);
+      }
+      const alt = requireNonEmptyString(spec.alt, `${label}.alt`);
+      requireNonEmptyString(spec.source_ref, `${label}.source_ref`);
+      if (extension === ".gif") {
+        requireNonEmptyString(spec.motion_ref, `${label}.motion_ref`);
+      }
+      const bytes = await fs.readFile(resolvedAsset);
+      const dimensions = sourceImageDimensions(bytes, extension, `${label}.asset_path`);
+      if (dimensions.width <= 0 || dimensions.height <= 0) {
+        throw new Error(`${label}.asset_path has invalid dimensions`);
+      }
+      if (spec.fit !== "cover") {
+        const sourceRatio = dimensions.width / dimensions.height;
+        const frameRatio = position.width / position.height;
+        const ratioDelta = Math.abs(sourceRatio - frameRatio) / sourceRatio;
+        if (ratioDelta > 0.005) {
+          throw new Error(
+            `${label}.position aspect ratio must match its source image within 0.5% when fit is contain; use a source-matched frame so strict bbox QA remains exact`,
+          );
+        }
+      }
+      const blob = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      const item = slide.images.add({
+        blob,
+        contentType,
+        alt,
+        fit: spec.fit === "cover" ? "cover" : "contain",
+        position,
+      });
+      item.name = spec.name || `s${entry.slide}-image-${index + 1}`;
     } else if (spec.type === "shape") {
       const item = slide.shapes.add({
         geometry: spec.geometry || "rect",
@@ -395,7 +491,7 @@ for (let index = 0; index < slides.length; index += 1) {
   }
   validateEditTargets(entry, mapEntry);
   rewriteInheritedTargets(slide, entry, mapEntry);
-  addDeclaredElements(slide, entry, mapEntry);
+  await addDeclaredElements(slide, entry, mapEntry);
   const needsBody = mapEntry.editTargets.some((item) => item.action === "add");
   if (needsBody && !(entry.native_elements || []).length) {
     throw new Error(

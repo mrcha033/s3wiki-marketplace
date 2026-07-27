@@ -133,6 +133,33 @@ def create_auditable_project(root: Path, builder_text: str) -> tuple[dict, Path,
 
 
 class SchemaAndTemplateContractTests(unittest.TestCase):
+    def test_derived_template_profile_is_hash_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            profile = Path(temp_name) / "template-profile.json"
+            write_json(profile, minimal_profile())
+            config = {
+                "schema_version": 2,
+                "template": {
+                    "profile_sha256": lab_slides.sha256_file(profile),
+                }
+            }
+            self.assertEqual(
+                lab_slides.template_profile_integrity_errors(config, profile),
+                [],
+            )
+            changed = minimal_profile()
+            changed["slides"][1]["safe_content_zone"]["w"] = 100
+            write_json(profile, changed)
+            self.assertTrue(
+                any(
+                    "profile hash changed" in error
+                    for error in lab_slides.template_profile_integrity_errors(
+                        config,
+                        profile,
+                    )
+                )
+            )
+
     def test_custom_template_palette_uses_one_accent_family(self) -> None:
         profile = {
             "theme": {
@@ -198,11 +225,23 @@ class SchemaAndTemplateContractTests(unittest.TestCase):
                 config["style"]["active_palette_sha256"],
                 lab_slides.active_palette_sha256(lab_slides.DEFAULT_ACTIVE_PALETTE),
             )
-            self.assertEqual(config["qa"]["visual_contract"]["min_figure_span_ratio"], 0.50)
-            self.assertEqual(config["qa"]["visual_contract"]["min_figure_area_ratio"], 0.18)
+            interaction_budget = config["qa"]["visual_contract"]["figure_budget_profiles"][
+                "interaction"
+            ]
+            self.assertEqual(interaction_budget["preferred_bbox_area_ratio"], [0.28, 0.42])
+            self.assertEqual(interaction_budget["hard_bbox_area_ratio"], [0.20, 0.52])
+            self.assertEqual(interaction_budget["min_information_area_ratio"], 0.06)
+            self.assertEqual(
+                config["qa"]["visual_contract"]["anchor_profile_map"]["timeline"],
+                "context",
+            )
             self.assertEqual(config["qa"]["visual_contract"]["minimum_diagram_nodes"], 2)
             self.assertEqual(config["qa"]["visual_contract"]["minimum_diagram_labels"], 2)
             self.assertTrue(config["qa"]["visual_contract"]["require_diagram_connector"])
+            self.assertEqual(config["qa"]["motion_contract"]["manim_version"], "0.20.1")
+            self.assertTrue((project / "content/motion-assets.json").is_file())
+            self.assertTrue((project / "work/motion/system_os_interaction.py").is_file())
+            self.assertTrue((project / "work/motion/ai_serving_interaction.py").is_file())
             self.assertIn("equation", config["qa"]["content_contract"]["allowed_text_roles"])
 
     def test_html_prototype_persists_an_enforced_html_assisted_native_route(self) -> None:
@@ -248,6 +287,10 @@ class SchemaAndTemplateContractTests(unittest.TestCase):
         self.assertIn("PT_TO_CSS_PX", text)
         self.assertNotIn("CUSTOM_SLIDE_BUILDERS", text)
         self.assertIn('spec.type === "line"', text)
+        self.assertIn('spec.type === "image"', text)
+        self.assertIn("slide.images.add", text)
+        self.assertIn("image/gif", text)
+        self.assertIn("fs.realpath", text)
         self.assertIn('geometry: "line"', text)
         self.assertIn("resolvePaletteColor", text)
         self.assertIn("style.active_palette", text)

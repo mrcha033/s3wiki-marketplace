@@ -5,7 +5,8 @@
 - Precedence
 - English and title rules
 - Closed color system
-- Figure-first composition
+- Proportionate visual composition
+- Motion boundary
 - No-filler rule
 - Typography and editability
 - Incremental and hardware figures
@@ -74,14 +75,28 @@ shadows, decorative red strokes, or color without a semantic reason. Repeat the
 same concept in the same color throughout the deck. Encode critical distinctions
 with labels, position, or line style as well as color.
 
-## Figure-first composition
+## Proportionate visual composition
 
 Give every body slide one primary figure, plot, table, comparison, image, code
-delta, or mechanism diagram. Target 60–75% of the approved body zone; the
-automated floor is a 50% bounding span. Text-only slides, large prose boxes, and
+delta, or mechanism diagram. Keep it large enough to read but small enough to
+preserve hierarchy and whitespace. The automated `figure_bbox_area_ratio` is
+the figure's clipped bounding-box area divided by the approved body-zone area;
+it is not a linear width. Each anchor maps to a pinned budget:
+
+| Profile | Anchors | Preferred bbox area | Hard bbox area | Minimum information area |
+|---|---|---:|---:|---:|
+| context | context, roadmap, timeline | 18–30% | 12–40% | 3% |
+| architecture | architecture, system | 26–40% | 18–50% | 5% |
+| interaction | flow, mechanism, pipeline, process | 28–42% | 20–52% | 6% |
+| evidence | plots, comparisons, tables, results | 24–38% | 16–48% | 5% |
+| code | code, code delta | 22–34% | 14–44% | 4% |
+| media | image, paper figure, screenshot, motion | 28–42% | 20–50% | 8% |
+
+Hard-range violations fail. Preferred-band violations are review warnings,
+including oversized visuals. Text-only slides, large prose boxes, and
 decorative rectangles do not satisfy the figure gate. Information-bearing
-visual-role geometry must also occupy at least 18% of the body zone, preventing
-widely separated tiny marks from faking a dominant figure.
+visual-role geometry has a separate floor so widely separated tiny marks cannot
+fake a primary visual.
 
 For `process`, `mechanism`, `flow`, `pipeline`, `architecture`, and `system`
 anchors built from native primitives, use at least two meaningful
@@ -99,6 +114,11 @@ Use this order:
 3. establish reading order and stable coordinates;
 4. add direct labels, axes, units, and up to three brief callouts;
 5. remove prose, duplicate legends, ornamental icons, and unexplained color.
+
+The selected source frame and its inspected safe zone are authoritative.
+`template_frame.role` must match the source-frame role, and a custom add zone
+must exactly match `safe_content_zone`; neither may be relabeled or shrunk to
+weaken the figure budget.
 
 For paper figures, do not paste a dense multi-panel manuscript figure unchanged.
 Select the relevant panel or rebuild the comparison, enlarge labels and axes,
@@ -120,6 +140,20 @@ do not contribute to information-bearing figure area. Primitive plots require
 orthogonal line axes and at least two numeric or source-bound data marks.
 Chart/plot objects require numeric series/data or a bound source reference;
 string-only labels do not establish plotted evidence.
+
+## Motion boundary
+
+Use progressive native slides for discrete state changes. Use a short
+source-bound Manim GIF only when time, queueing, concurrency, ownership, or
+state transfer is materially clearer through motion. Use one clip, 3–8 seconds,
+stable component coordinates, no more than five moving tokens, and meaningful
+start/end frames. Keep motion to at most 25% of the deck.
+
+The builder embeds GIF bytes as a bounded `image`. It does not author native
+PowerPoint video. A longer or higher-fidelity MP4 is a companion H.264/AAC asset
+with a poster in the deck; direct OOXML video injection is forbidden. Read
+[motion-and-domain-visuals.md](motion-and-domain-visuals.md) for systems, OS,
+and AI-serving visual grammar.
 
 ## No-filler rule
 
